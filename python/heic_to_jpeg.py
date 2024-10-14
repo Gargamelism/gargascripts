@@ -3,6 +3,8 @@ import os
 from PIL import Image
 from pillow_heif import register_heif_opener
 
+from helpers import change_extension
+
 
 def traverse_dir(base_path, cb):
     for root, dirs, files in os.walk(base_path, topdown=True):
@@ -17,9 +19,7 @@ def heic_to_jpg(file_path):
     if file_path.endswith(".heic"):
         print(f"converting {file_path} to jpg")
         my_pic = Image.open(file_path)  # opening .heic images
-        jpg_pic_name = (
-            file_path.split(".")[0] + ".jpg"
-        )  # creating new names for .jpg images
+        jpg_pic_name = change_extension(file_path, ".jpg")
         my_pic.save(jpg_pic_name, format="JPEG", optimize=True, quality=100)
 
 
