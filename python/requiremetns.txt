@@ -7,3 +7,6 @@ pillow_heif==0.18.*
 # flac_to_mp3 / random_audio
 pydub==0.25.*
 simpleaudio==1.0.*
+# sheet music generator
+musicscore==2.6.*
+numpy==1.26.*

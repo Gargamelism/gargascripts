@@ -94,7 +94,7 @@ def get_random_chord():
 def get_random_solfege(notes_count):
     key = random.choice(KEYS)
     print(f"key: {key}")
-    solfege = [str(random.randint(0, 9)) for _ in range(notes_count)]
+    solfege = [str(random.randint(-5, 8)) for _ in range(notes_count)]
     solfege = [f"{note} |" if (i + 1) % 4 == 0 else note for i, note in enumerate(solfege)]
     print(" ".join(solfege))
 

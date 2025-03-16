@@ -6,7 +6,6 @@ import tempfile
 import time
 import simpleaudio
 from pydub import AudioSegment
-from progressbar import ProgressBar, ETA
 
 
 def change_extension(filename, new_extension):
@@ -58,27 +57,16 @@ def play_audio(file_path):
         wav_audio = None
 
         audio = AudioSegment.from_file(file_path, format=file_path.split(".")[-1])
-        audio = audio - 20
         wav_audio = audio.export(format="wav")
 
-        # audio details
         player = simpleaudio.play_buffer(wav_audio.read(), 1, 2, audio.frame_rate * 2)
         minutes, seconds = divmod(audio.duration_seconds, 60)
         print(f"Playing {file_path}, length: {int(minutes)}:{int(seconds):02d} minutes, frame rate: {audio.frame_rate}")
 
-        # progress bar details
-        bar = ProgressBar(min_value=0, maxval=audio.duration_seconds, widgets=[ETA()])
-        bar.start()
-        seconds_count = 0
-
         stop_playing = False
         while not stop_playing and player.is_playing():
-            time.sleep(1)
-            seconds_count += 1
-            print(f"\n{seconds_count}/{int(audio.duration_seconds)}")
-            bar.update(seconds_count)
+            time.sleep(0.1)
             stop_playing = input_with_timeout("Press 's' to stop playing", timeout=audio.duration_seconds) == "s"
         player.stop()
-        bar.finish()
     else:
         print(f"File {file_path} does not exist.")
