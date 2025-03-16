@@ -41,7 +41,7 @@ def generate_solfege_notes(args):
 
     notes = " ".join(
         [
-            f"{np.random.choice(notes)}{np.random.choice(accidentals, p=accidentals_weights)}{np.random.choice(octaves)}"
+            f"{np.random.choice(notes)}{np.random.choice(accidentals, p=accidentals_weights)}{np.random.choice(octaves)}-1.0"
             for _ in range(parsed_args.length)
         ]
     )
