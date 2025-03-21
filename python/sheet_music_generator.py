@@ -87,20 +87,32 @@ def generate_dictation_notes(args) -> Melody:
     default_key = random.choice(keys)
     parser.add_argument("--key", "-k", default=default_key, help='Key signature (e.g., "C", "G", "F#")')
 
-    time_signatures = ["3/4", "4/4"]
+    time_signatures = ["4/4"]
     default_time = random.choice(time_signatures)
-    parser.add_argument("--time", "-t", default=default_time, help='Time signature (e.g., "4/4", "3/4")')
+    parser.add_argument(
+        "--time", "-t", default=default_time, choices=["3/4", "4/4"], help='Time signature (e.g., "4/4", "3/4")'
+    )
 
     parser.add_argument("--only_diatonic", "-d", default=True, action="store_true", help="Use only diatonic notes")
 
     parser.add_argument("--length", "-l", default=8, type=int, help="Number of notes in the melody")
+
+    default_octaves = ["4"]
+    parser.add_argument(
+        "--octaves",
+        "-o",
+        default=default_octaves,
+        choices=["1", "2", "3", "4", "5", "6"],
+        nargs="+",
+        help="Octaves to use",
+    )
 
     parsed_args, unkown_args = parser.parse_known_args(args)
 
     # Define the notes, octaves, and accidentals
     key_signature = key.Key(parsed_args.key)
     notes = get_key_notes(key_signature)
-    octaves = ["4", "5"]
+    octaves = parsed_args.octaves
     accidentals = [""]
     accidentals_weights = [1.0]
     if not parsed_args.only_diatonic:
@@ -210,11 +222,17 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     return melody_stream
 
 
-def save_score(melody, output_format="musicxml", filename="output"):
+def save_score(melody, output_format="musicxml", filename="", key=""):
     """
     Save the score in the specified format
     Supported formats: musicxml, midi, pdf
     """
+
+    filename = filename.strip()
+
+    if key:
+        filename += f"_{key}"
+
     if output_format == "musicxml":
         melody.write("musicxml", f"{filename}.xml")
     elif output_format == "midi":
@@ -234,7 +252,7 @@ def main(args):
     )
 
     parser.add_argument("--format", "-f", choices=["musicxml", "midi", "pdf"], default="musicxml", help="Output format")
-    parser.add_argument("--output", "-o", default="output", help="Output filename (without extension)")
+    parser.add_argument("--output", "-o", default="output/output", help="Output filename (without extension)")
     parser.add_argument("--tempo", "-p", default=120, type=int, help="Tempo in beats per minute")
 
     args, sub_args = parser.parse_known_args(args)
@@ -247,7 +265,7 @@ def main(args):
 
     # Create and save the score
     melody_stream = create_melody(melody_obj)
-    save_score(melody_stream, args.format, args.output)
+    save_score(melody_stream, args.format, args.output, melody_obj.key)
 
     print(f"Score saved as '{args.output}.{args.format}'")
 
