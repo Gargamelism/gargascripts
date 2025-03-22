@@ -142,7 +142,7 @@ def main():
         random_license_plate = get_random_license_plate()
         print(f"license plate: {random_license_plate}")
 
-        tonal_code = list(range(1, 9))
+        tonal_code = list(range(1, 17))
         random.shuffle(tonal_code)
         print(f"tonal code: {tonal_code}")
     if args.timer:

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import argparse
-from music21 import stream, key, meter, note, layout, tempo
+from music21 import stream, key, meter, note, tempo
 import random
 import sys
 from pprint import pprint
 import numpy as np
 from dataclasses import dataclass
+import pathlib
+import logging
+from midi2audio import FluidSynth
 
 
 @dataclass
@@ -75,12 +78,37 @@ def generate_solfege_notes(args) -> Melody:
     return Melody(notes=notes, key=parsed_args.key, time_signature=parsed_args.time, tempo=60)
 
 
+def generate_melodic_dictation_notes(args) -> str:
+    # Define the notes, octaves, and accidentals
+    key_signature = key.Key(args.key)
+    key_notes = get_key_notes(key_signature)
+    octaves = args.octaves
+    accidentals = [""]
+    accidentals_weights = [1.0]
+    if not args.only_diatonic:
+        accidentals.extend(["#", "b"])
+        accidentals_weights = [0.8, 0.1, 0.1]  # Lower weight for accidentals
+
+    notes = [
+        f"{np.random.choice(key_notes)}{np.random.choice(accidentals, p=accidentals_weights)}{np.random.choice(octaves)}-1.0"
+        for _ in range(args.length)
+    ]
+
+    # Add a tonic note at the beginning
+    tonic_measure = [f"{key_notes[0].split('-')[0]}-1.0" for _ in range(4)]
+    notes = tonic_measure + notes
+
+    return " ".join(notes)
+
+
 def generate_dictation_notes(args) -> Melody:
     if args is None:
         args = []
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Solfege parameters")
+
+    parser.add_argument("--d-type", "-dt", choices=["melodic"], default="melodic", help="Type of dictation to generate")
 
     # Define the key signature
     keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
@@ -109,22 +137,11 @@ def generate_dictation_notes(args) -> Melody:
 
     parsed_args, unkown_args = parser.parse_known_args(args)
 
-    # Define the notes, octaves, and accidentals
-    key_signature = key.Key(parsed_args.key)
-    notes = get_key_notes(key_signature)
-    octaves = parsed_args.octaves
-    accidentals = [""]
-    accidentals_weights = [1.0]
-    if not parsed_args.only_diatonic:
-        accidentals.extend(["#", "b"])
-        accidentals_weights = [0.8, 0.1, 0.1]  # Lower weight for accidentals
-
-    notes = " ".join(
-        [
-            f"{np.random.choice(notes)}{np.random.choice(accidentals, p=accidentals_weights)}{np.random.choice(octaves)}-1.0"
-            for _ in range(parsed_args.length)
-        ]
-    )
+    notes = {
+        "melodic": generate_melodic_dictation_notes,
+    }.get(
+        parsed_args.d_type
+    )(parsed_args)
 
     return Melody(notes=notes, key=parsed_args.key, time_signature=parsed_args.time, tempo=60)
 
@@ -207,6 +224,7 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     try:
         for note_str in melody_obj.notes.split():
             note_name, duration = note_str.split("-")
+            logging.debug(f"Note: {note_name}, Duration: {duration}")
             # Handle rests
             if note_name.lower() == "r":
                 note_obj = note.Rest()
@@ -222,23 +240,28 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     return melody_stream
 
 
-def save_score(melody, output_format="musicxml", filename="", key=""):
+def save_score(melody: stream.Stream, output_format="musicxml", filename="", key="") -> pathlib.Path:
     """
     Save the score in the specified format
     Supported formats: musicxml, midi, pdf
     """
 
-    filename = filename.strip()
+    out_put_file = filename.strip()
 
     if key:
-        filename += f"_{key}"
+        out_put_file += f"_{key}"
 
-    if output_format == "musicxml":
-        melody.write("musicxml", f"{filename}.xml")
-    elif output_format == "midi":
-        melody.write("midi", f"{filename}.mid")
-    elif output_format == "pdf":
-        melody.write("lily.pdf", f"{filename}.pdf")
+    extension = {"musicxml": ".xml", "midi": ".mid", "pdf": ".pdf", "mp3": ".mp3"}.get(output_format)
+
+    midi_path = ""
+    if output_format == "mp3":
+        midi_path = melody.write("midi", f"{out_put_file}.mid")
+        fluidSynth = FluidSynth("~/soundfonts/st_piano.sf2")
+        audio_path = f"{out_put_file}.mp3"
+        fluidSynth.midi_to_audio(midi_path, audio_path)
+        return pathlib.Path(audio_path)
+
+    return melody.write(output_format, f"{out_put_file}{extension}")
 
 
 def main(args):
@@ -251,9 +274,17 @@ def main(args):
         help="Type of random notes to generate",
     )
 
-    parser.add_argument("--format", "-f", choices=["musicxml", "midi", "pdf"], default="musicxml", help="Output format")
-    parser.add_argument("--output", "-o", default="output/output", help="Output filename (without extension)")
+    parser.add_argument(
+        "--formats",
+        "-f",
+        choices=["musicxml", "midi", "pdf", "mp3"],
+        default=["musicxml"],
+        nargs="+",
+        help="Output format(s)",
+    )
+    parser.add_argument("--output", "-o", required=True, help="Output filename (without extension)")
     parser.add_argument("--tempo", "-p", default=120, type=int, help="Tempo in beats per minute")
+    parser.add_argument("--debug", "-v", action="store_true", help="Print debug information")
 
     args, sub_args = parser.parse_known_args(args)
 
@@ -263,11 +294,17 @@ def main(args):
         "dictation": generate_dictation_notes,
     }.get(args.random_type)(sub_args)
 
+    logging.debug(f"Melody object: {melody_obj}")
+
     # Create and save the score
     melody_stream = create_melody(melody_obj)
-    save_score(melody_stream, args.format, args.output, melody_obj.key)
 
-    print(f"Score saved as '{args.output}.{args.format}'")
+    final_files = []
+    for format in args.formats:
+        final_file = save_score(melody_stream, format, args.output, melody_obj.key)
+        final_files.append(final_file)
+
+    print(f"Score saved as '{final_files}'")
 
 
 if __name__ == "__main__":

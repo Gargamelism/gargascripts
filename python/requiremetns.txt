@@ -10,3 +10,5 @@ simpleaudio==1.0.*
 # sheet music generator
 musicscore==2.6.*
 numpy==1.26.*
+#midi2audio requires: sudo apt-get install fluidsynth
+midi2audio==0.1.*
