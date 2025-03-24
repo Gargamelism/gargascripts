@@ -8,7 +8,17 @@ import numpy as np
 from dataclasses import dataclass
 import pathlib
 import logging
-from midi2audio import FluidSynth
+from datetime import datetime
+import subprocess
+
+SOUND_FONT_PATH = "/home/gargamel/dev/soundfonts/st_piano.sf2"
+
+OUTPUT_FORMATS = {
+    "musicxml": {"extension": ".xml"},
+    "midi": {"extension": ".mid"},
+    "pdf": {"extension": ".pdf"},
+    "mp3": {"extension": ".mp3"},
+}
 
 
 @dataclass
@@ -240,6 +250,59 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     return melody_stream
 
 
+def midi_to_wav(midi_file, wav_file, soundfont_path):
+    try:
+        subprocess.run(
+            [
+                "fluidsynth",
+                "-ni",  # Non-interactive mode
+                "-g",
+                "1.0",  # Gain (volume)
+                "-T",
+                "wav",  # Output type
+                "-F",
+                wav_file,  # Output file
+                soundfont_path,  # SoundFont
+                midi_file,  # Input MIDI
+            ],
+            check=True,
+        )
+
+    except Exception as err:
+        print(err)
+        return False
+
+    return True
+
+
+def wav_to_mp3(wav_file, mp3_file):
+    """
+    Convert WAV to MP3 using ffmpeg (must be installed)
+    """
+    try:
+        # Check if ffmpeg is installed
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        # Convert WAV to MP3
+        subprocess.run(
+            ["ffmpeg", "-i", wav_file, "-b:a", "320k", "-f", "mp3", mp3_file],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+
+        # Delete the WAV file after conversion
+        pathlib.Path(wav_file).unlink()
+
+        return True
+    except subprocess.CalledProcessError:
+        print("Error: ffmpeg command failed. Make sure ffmpeg is installed.")
+        return False
+    except FileNotFoundError:
+        print("Error: ffmpeg not found. Please install ffmpeg.")
+        return False
+
+
 def save_score(melody: stream.Stream, output_format="musicxml", filename="", key="") -> pathlib.Path:
     """
     Save the score in the specified format
@@ -251,15 +314,21 @@ def save_score(melody: stream.Stream, output_format="musicxml", filename="", key
     if key:
         out_put_file += f"_{key}"
 
-    extension = {"musicxml": ".xml", "midi": ".mid", "pdf": ".pdf", "mp3": ".mp3"}.get(output_format)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    out_put_file += f"_{timestamp}"
+
+    extension = OUTPUT_FORMATS.get(output_format).get("extension")
 
     midi_path = ""
     if output_format == "mp3":
         midi_path = melody.write("midi", f"{out_put_file}.mid")
-        fluidSynth = FluidSynth("~/soundfonts/st_piano.sf2")
-        audio_path = f"{out_put_file}.mp3"
-        fluidSynth.midi_to_audio(midi_path, audio_path)
-        return pathlib.Path(audio_path)
+
+        wav_path = f"{out_put_file}.wav"
+        midi_to_wav(midi_path, wav_path, SOUND_FONT_PATH)
+
+        mp3_path = f"{out_put_file}.mp3"
+        wav_to_mp3(wav_path, mp3_path)
+        return pathlib.Path(mp3_path)
 
     return melody.write(output_format, f"{out_put_file}{extension}")
 
@@ -277,7 +346,7 @@ def main(args):
     parser.add_argument(
         "--formats",
         "-f",
-        choices=["musicxml", "midi", "pdf", "mp3"],
+        choices=OUTPUT_FORMATS.keys(),
         default=["musicxml"],
         nargs="+",
         help="Output format(s)",
