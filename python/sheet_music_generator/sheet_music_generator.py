@@ -5,11 +5,13 @@ import random
 import sys
 from pprint import pprint
 import numpy as np
-from dataclasses import dataclass
 import pathlib
 import logging
 from datetime import datetime
 import subprocess
+
+from melodic_dictation import generate_dictation_notes
+from helper import Melody, get_key_notes
 
 SOUND_FONT_PATH = "/home/gargamel/dev/soundfonts/st_piano.sf2"
 
@@ -19,31 +21,6 @@ OUTPUT_FORMATS = {
     "pdf": {"extension": ".pdf"},
     "mp3": {"extension": ".mp3"},
 }
-
-
-@dataclass
-class Melody:
-    notes: str
-    key: str = "C"
-    time_signature: str = "4/4"
-    tempo: int = 120
-
-
-def get_key_notes(key_signature: key.Key) -> list:
-    """
-    Get the notes in a key signature
-    """
-    # Get the notes in the key signature
-    notes = key_signature.pitches
-    notes = [str(note) for note in notes]
-
-    # Turn the - to b for flat notes
-    notes = [note.replace("-", "b") for note in notes]
-
-    # Remove the octave number
-    notes = [note[:-1] for note in notes]
-
-    return notes
 
 
 def generate_solfege_notes(args) -> Melody:
@@ -84,74 +61,6 @@ def generate_solfege_notes(args) -> Melody:
             for _ in range(parsed_args.length)
         ]
     )
-
-    return Melody(notes=notes, key=parsed_args.key, time_signature=parsed_args.time, tempo=60)
-
-
-def generate_melodic_dictation_notes(args) -> str:
-    # Define the notes, octaves, and accidentals
-    key_signature = key.Key(args.key)
-    key_notes = get_key_notes(key_signature)
-    octaves = args.octaves
-    accidentals = [""]
-    accidentals_weights = [1.0]
-    if not args.only_diatonic:
-        accidentals.extend(["#", "b"])
-        accidentals_weights = [0.8, 0.1, 0.1]  # Lower weight for accidentals
-
-    notes = [
-        f"{np.random.choice(key_notes)}{np.random.choice(accidentals, p=accidentals_weights)}{np.random.choice(octaves)}-1.0"
-        for _ in range(args.length)
-    ]
-
-    # Add a tonic note at the beginning
-    tonic_measure = [f"{key_notes[0].split('-')[0]}-1.0" for _ in range(4)]
-    notes = tonic_measure + notes
-
-    return " ".join(notes)
-
-
-def generate_dictation_notes(args) -> Melody:
-    if args is None:
-        args = []
-
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Solfege parameters")
-
-    parser.add_argument("--d-type", "-dt", choices=["melodic"], default="melodic", help="Type of dictation to generate")
-
-    # Define the key signature
-    keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
-    default_key = random.choice(keys)
-    parser.add_argument("--key", "-k", default=default_key, help='Key signature (e.g., "C", "G", "F#")')
-
-    time_signatures = ["4/4"]
-    default_time = random.choice(time_signatures)
-    parser.add_argument(
-        "--time", "-t", default=default_time, choices=["3/4", "4/4"], help='Time signature (e.g., "4/4", "3/4")'
-    )
-
-    parser.add_argument("--only_diatonic", "-d", default=True, action="store_true", help="Use only diatonic notes")
-
-    parser.add_argument("--length", "-l", default=8, type=int, help="Number of notes in the melody")
-
-    default_octaves = ["4"]
-    parser.add_argument(
-        "--octaves",
-        "-o",
-        default=default_octaves,
-        choices=["1", "2", "3", "4", "5", "6"],
-        nargs="+",
-        help="Octaves to use",
-    )
-
-    parsed_args, unkown_args = parser.parse_known_args(args)
-
-    notes = {
-        "melodic": generate_melodic_dictation_notes,
-    }.get(
-        parsed_args.d_type
-    )(parsed_args)
 
     return Melody(notes=notes, key=parsed_args.key, time_signature=parsed_args.time, tempo=60)
 
@@ -231,21 +140,18 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     melody_stream.append(tempo.MetronomeMark(number=melody_obj.tempo))
 
     # Add notes to the stream
-    try:
-        for note_str in melody_obj.notes.split():
-            note_name, duration = note_str.split("-")
-            logging.debug(f"Note: {note_name}, Duration: {duration}")
-            # Handle rests
-            if note_name.lower() == "r":
-                note_obj = note.Rest()
-            else:
-                # Split the note and duration (e.g., "C4-1.0")
-                note_obj = note.Note(note_name)
+    for note_str in melody_obj.notes.split():
+        note_name, duration = note_str.split("-")
+        logging.debug(f"Note: {note_name}, Duration: {duration}")
+        # Handle rests
+        if note_name.lower() == "r":
+            note_obj = note.Rest()
+        else:
+            # Split the note and duration (e.g., "C4-1.0")
+            note_obj = note.Note(note_name)
 
-            note_obj.quarterLength = float(duration)
-            melody_stream.append(note_obj)
-    except Exception as e:
-        print(f"Error creating melody: {e}, {note_str}")
+        note_obj.quarterLength = float(duration)
+        melody_stream.append(note_obj)
 
     return melody_stream
 
@@ -357,6 +263,9 @@ def main(args):
 
     args, sub_args = parser.parse_known_args(args)
 
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+
     melody_obj = {
         "solfege": generate_solfege_notes,
         "rhythm": generate_rhythm_notes,
@@ -366,11 +275,11 @@ def main(args):
     logging.debug(f"Melody object: {melody_obj}")
 
     # Create and save the score
-    melody_stream = create_melody(melody_obj)
+    notes_stream = melody_obj.notes_stream if melody_obj.notes_stream else create_melody(melody_obj)
 
     final_files = []
     for format in args.formats:
-        final_file = save_score(melody_stream, format, args.output, melody_obj.key)
+        final_file = save_score(notes_stream, format, args.output, melody_obj.key)
         final_files.append(final_file)
 
     print(f"Score saved as '{final_files}'")
