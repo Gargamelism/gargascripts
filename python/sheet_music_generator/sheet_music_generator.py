@@ -13,7 +13,7 @@ import subprocess
 from melodic_dictation import generate_dictation_notes
 from helper import Melody, get_key_notes
 
-SOUND_FONT_PATH = "/home/gargamel/dev/soundfonts/st_piano.sf2"
+SOUND_FONT_PATH = "/home/gargamel/soundfonts/198_Rhodes_VS_extreme.sf2"
 
 OUTPUT_FORMATS = {
     "musicxml": {"extension": ".xml"},
@@ -264,7 +264,7 @@ def main(args):
     args, sub_args = parser.parse_known_args(args)
 
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
     melody_obj = {
         "solfege": generate_solfege_notes,

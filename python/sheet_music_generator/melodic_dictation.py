@@ -5,6 +5,7 @@ import numpy as np
 from helper import Melody, get_key_notes
 from music21 import key, stream, meter, note, tempo
 from note_rule_engine import NoteRuleEngine, Context, ReturnToTonicRule, LeapMovementRule, StepMovementRule
+from pprint import pformat
 
 TEMPO = 60
 
@@ -26,7 +27,7 @@ def generate_melodic_dictation_notes(args) -> str:
 
     context_key = key.Key(args.key)
     context = Context(
-        key=context_key, time_signature=meter.TimeSignature(args.time), notes=context_key.pitches, rules=[]
+        key=context_key, time_signature=meter.TimeSignature(args.time), notes=context_key.pitches, steps=[]
     )
     rule_engine = NoteRuleEngine(
         rules=[
@@ -66,7 +67,7 @@ def generate_melodic_dictation_notes(args) -> str:
         current_note.quarterLength = 1.0  # Default to quarter notes
         melody.append(current_note)
 
-    logging.debug(f"Rules ran: {context.rules}")
+    logging.debug(f"Rules ran: {pformat(rule_engine._context.steps)}")
 
     return melody
 

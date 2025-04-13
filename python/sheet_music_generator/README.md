@@ -1,3 +1,5 @@
+## Instructions
+
 1. **Install Dependencies**:
     Ensure you have all the required dependencies installed. You can use the provided `requirements.txt` file to install them.
     ```sh
@@ -16,3 +18,9 @@
     ```sh
     python sheet_music_generator.py
     ```
+
+## Road map
+1. Add melodic minor dictation
+1. Make chances change - as more "staying the same" happens - increase chance of leap, after leap increase chance of staying the same/step
+1. Add minor scale melodic dictation
+1. Add harmonic dictation

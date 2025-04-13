@@ -5,13 +5,23 @@ from typing import Callable
 
 
 @dataclass
+class RuleEngineLogStep:
+    """Log step for the rule engine"""
+
+    rule_name: str
+    prev_note: note.Note
+    new_note: note.Note
+    interval: int
+
+
+@dataclass
 class Context:
     """Context for the rule engine"""
 
     key: key.Key
     time_signature: meter.TimeSignature
     notes: list[note.Note]
-    rules: list[str]
+    steps: list[RuleEngineLogStep]
     tempo: int = 60
     only_diatonic: bool = True
 
@@ -49,6 +59,15 @@ class RuleBase:
 
         new_note = prev_note.transpose(interval_steps)
         new_note.pitch.accidental = current_key.accidentalByStep(new_note.step)
+
+        context.steps.append(
+            RuleEngineLogStep(
+                rule_name=self._name,
+                prev_note=prev_note,
+                new_note=new_note,
+                interval=interval_steps,
+            )
+        )
 
         return new_note
 
@@ -122,11 +141,11 @@ class NoteRuleEngine:
 
             # Choose a rule based on probability
             chosen_rule = random.choices(applicable_rules, weights=normalized_probs, k=1)[0]
-            context.rules.append(str(chosen_rule))
             return chosen_rule.action(prev_note, context)
 
         # Fallback: just return the same note
-        return note.Note(prev_note.nameWithOctave, type=prev_note.duration.type)
+        velocity = random.randint(90, 120)
+        return note.Note(prev_note.nameWithOctave, type=prev_note.duration.type, velocity=velocity)
 
 
 class StepMovementRule(RuleBase):
@@ -141,7 +160,8 @@ class StepMovementRule(RuleBase):
         return True
 
     def action(self, prev_note, context):
-        return self._get_note_by_interval(prev_note, random.choice([-2, -1, 1, 2]), context)
+        interval_steps = random.choice([-2, -1, 1, 2])
+        return self._get_note_by_interval(prev_note, interval_steps, context)
 
 
 class LeapMovementRule(RuleBase):
