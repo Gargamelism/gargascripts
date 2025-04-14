@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 import subprocess
 
-from melodic_dictation import generate_dictation_notes
+from melodic_dictation.melodic_dictation import generate_dictation_notes
 from helper import Melody, get_key_notes
 
 SOUND_FONT_PATH = "/home/gargamel/soundfonts/198_Rhodes_VS_extreme.sf2"

@@ -20,7 +20,5 @@
     ```
 
 ## Road map
-1. Add melodic minor dictation
 1. Make chances change - as more "staying the same" happens - increase chance of leap, after leap increase chance of staying the same/step
-1. Add minor scale melodic dictation
 1. Add harmonic dictation
