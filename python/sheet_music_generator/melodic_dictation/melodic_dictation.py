@@ -44,9 +44,9 @@ def generate_melodic_dictation_notes(args) -> str:
             StepMovementRule(probability=0.6),
             LeapMovementRule(probability=0.3),
             ReturnToTonicRule(probability=0.1),
-            MinorScaleVariantRule(probability=0.6),
         ],
         context=context,
+        post_prosess_rules=[MinorScaleVariantRule(probability=1)],
     )
 
     # Set key and time signature

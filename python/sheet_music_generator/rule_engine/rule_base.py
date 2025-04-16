@@ -1,3 +1,6 @@
+from music21 import note
+
+
 class RuleBase:
     """Base class for all rules in the rule engine"""
 
@@ -9,7 +12,7 @@ class RuleBase:
         """Condition to check if the rule should be applied"""
         raise NotImplementedError("Subclasses should implement this method")
 
-    def action(self, prev_step, context):
+    def action(self, prev_step, context) -> note.Note:
         """Action to perform if the condition is met"""
         raise NotImplementedError("Subclasses should implement this method")
 

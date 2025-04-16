@@ -8,9 +8,10 @@ from rule_engine.rule_base import RuleBase
 class RuleEngine:
     """Rule engine for determining the next note based on previous notes"""
 
-    def __init__(self, rules: list[RuleBase], context: Any):
+    def __init__(self, rules: list[RuleBase], context: Any, post_prosess_rules: list[RuleBase] = None):
         self._rules = rules
         self._context = context
+        self._post_process_rules = post_prosess_rules or []
 
     def add_rule(self, rule: RuleBase):
         """
@@ -37,6 +38,14 @@ class RuleEngine:
         """Clear all rules"""
         self._rules = rules
 
+    def apply_post_processing(self, note_obj: note.Note, context=None):
+        """Apply all enabled post-processing rules to the note"""
+        result = note_obj
+        for rule in self._post_process_rules:
+            if rule.condition:
+                result = rule.action(result, context)
+        return result
+
     def get_next_note(self, prev_note, context=None):
         """
         Determine the next note based on the rules and previous note
@@ -54,12 +63,15 @@ class RuleEngine:
             prev_note = note.Note(prev_note)
 
         # Check each rule in order
-        applicable_rules = []
+        applicable_rules: list[RuleBase] = []
         for rule in self._rules:
             if rule.condition(prev_note, context):
                 # Only apply the rule based on its probability
                 if random.random() <= rule.probability:
                     applicable_rules.append(rule)
+
+        # If no rules apply, return the same note
+        chosen_note = note.Note(prev_note.nameWithOctave, type=prev_note.duration.type)
 
         # If we have applicable rules, choose one (weighted by probability)
         if applicable_rules:
@@ -72,8 +84,9 @@ class RuleEngine:
 
             # Choose a rule based on probability
             chosen_rule = random.choices(applicable_rules, weights=normalized_probs, k=1)[0]
-            return chosen_rule.action(prev_note, context)
+            chosen_note = chosen_rule.action(prev_note, context)
 
-        # Fallback: just return the same note
-        velocity = random.randint(90, 120)
-        return note.Note(prev_note.nameWithOctave, type=prev_note.duration.type, velocity=velocity)
+        chosen_note = self.apply_post_processing(chosen_note, context)
+        chosen_note.volume.velocity = random.randint(90, 120)
+
+        return chosen_note
