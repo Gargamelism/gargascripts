@@ -11,9 +11,9 @@ from datetime import datetime
 import subprocess
 
 from melodic_dictation.melodic_dictation import generate_dictation_notes
-from helper import Melody, get_key_notes
+from helper import Melody, get_key_notes, get_sound_font_path
 
-SOUND_FONT_PATH = "/home/gargamel/soundfonts/198_Rhodes_VS_extreme.sf2"
+SOUND_FONT_FOLDER_PATH = "/home/gargamel/soundfonts"
 
 OUTPUT_FORMATS = {
     "musicxml": {"extension": ".xml"},
@@ -230,7 +230,9 @@ def save_score(melody: stream.Stream, output_format="musicxml", filename="", key
         midi_path = melody.write("midi", f"{out_put_file}.mid")
 
         wav_path = f"{out_put_file}.wav"
-        midi_to_wav(midi_path, wav_path, SOUND_FONT_PATH)
+        sound_font_path = get_sound_font_path(SOUND_FONT_FOLDER_PATH)
+        logging.debug(f"Sound font path: {sound_font_path}")
+        midi_to_wav(midi_path, wav_path, sound_font_path)
 
         mp3_path = f"{out_put_file}.mp3"
         wav_to_mp3(wav_path, mp3_path)
