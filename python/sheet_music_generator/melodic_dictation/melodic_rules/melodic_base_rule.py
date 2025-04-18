@@ -1,4 +1,4 @@
-from music21 import note
+from music21 import note, key
 
 from rule_engine.rule_base import RuleBase
 from melodic_dictation.melodic_context import MelodicContext
@@ -25,12 +25,17 @@ class MelodicBaseRule(RuleBase):
     def probability(self) -> float:
         return self._probability
 
-    def _get_note_by_interval(self, prev_note: note.Note, interval_steps, context: MelodicContext):
+    def _get_note_by_interval(self, prev_note: note.Note, interval_steps: int, context: MelodicContext) -> note.Note:
         """Get a note by stepping a certain number of scale steps from previous note"""
-        current_key = context.key
 
-        new_note = prev_note.transpose(interval_steps)
-        new_note.pitch.accidental = current_key.accidentalByStep(new_note.step)
+        # Get the scale degree of the previous note
+        prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note)
+
+        # Calculate the number of half steps to the target scale degree
+        half_steps = context.key.intervalBetweenDegrees(prev_scale_degree, interval_steps).semitones
+
+        # Transpose the note by the calculated half steps
+        new_note = prev_note.transpose(half_steps)
 
         context.steps.append(
             {

@@ -10,4 +10,4 @@ class LeapMovementRule(MelodicBaseRule):
         return True
 
     def action(self, prev_note, context):
-        return self._get_note_by_interval(prev_note, random.choice([-5, -4, 3, 4, 5]), context)
+        return self._get_note_by_interval(prev_note, random.choice([-5, -4, -3, 3, 4, 5]), context)

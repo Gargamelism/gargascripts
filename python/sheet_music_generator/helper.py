@@ -1,7 +1,7 @@
 import os
 import random
 from music21 import key, stream
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Melody(BaseModel):
@@ -11,8 +11,10 @@ class Melody(BaseModel):
     time_signature: str = "4/4"
     tempo: int = 120
 
-    class ConfigDict:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
 
 
 def get_key_notes(key_signature: key.Key) -> list:
