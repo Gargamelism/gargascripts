@@ -141,17 +141,20 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
 
     # Add notes to the stream
     for note_str in melody_obj.notes.split():
-        note_name, duration = note_str.split("-")
-        logging.debug(f"Note: {note_name}, Duration: {duration}")
-        # Handle rests
-        if note_name.lower() == "r":
-            note_obj = note.Rest()
-        else:
-            # Split the note and duration (e.g., "C4-1.0")
-            note_obj = note.Note(note_name)
+        try:
+            note_name, duration = note_str.split("-")
+            logging.debug(f"Note: {note_name}, Duration: {duration}")
+            # Handle rests
+            if note_name.lower() == "r":
+                note_obj = note.Rest()
+            else:
+                note_obj = note.Note(note_name)
 
-        note_obj.quarterLength = float(duration)
-        melody_stream.append(note_obj)
+            note_obj.quarterLength = float(duration)
+            melody_stream.append(note_obj)
+        except ValueError as e:
+            logging.error(f"Invalid note format: {note_str}. Error: {e}")
+            continue
 
     return melody_stream
 
@@ -173,9 +176,11 @@ def midi_to_wav(midi_file, wav_file, soundfont_path):
             ],
             check=True,
         )
-
-    except Exception as err:
-        print(err)
+    except FileNotFoundError:
+        logging.error("fluidsynth not found. Please install fluidsynth.")
+        return False
+    except subprocess.CalledProcessError as e:
+        logging.error(f"fluidsynth command failed: {e}")
         return False
 
     return True

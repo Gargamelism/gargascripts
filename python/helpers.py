@@ -17,11 +17,16 @@ def get_files_in_base_path(base_path, filter_cb=None):
         filter_cb = lambda _: True
 
     relevant_files = []
-    for root, _, files in os.walk(base_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if filter_cb(file_path):
-                relevant_files.append(file_path)
+    try:
+        if not os.path.exists(base_path):
+            raise FileNotFoundError(f"Base path {base_path} does not exist.")
+        for root, _, files in os.walk(base_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if filter_cb(file_path):
+                    relevant_files.append(file_path)
+    except Exception as e:
+        print(f"Error while traversing directory: {e}")
 
     return relevant_files
 

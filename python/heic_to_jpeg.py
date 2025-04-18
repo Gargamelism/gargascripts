@@ -16,17 +16,18 @@ def traverse_dir(base_path, cb):
 
 
 def heic_to_jpg(file_path):
-    if file_path.endswith(".heic"):
-        print(f"converting {file_path} to jpg")
-        my_pic = Image.open(file_path)  # opening .heic images
-        jpg_pic_name = change_extension(file_path, ".jpg")
-        my_pic.save(jpg_pic_name, format="JPEG", optimize=True, quality=100)
+    try:
+        if file_path.endswith(".heic"):
+            print(f"converting {file_path} to jpg")
+            my_pic = Image.open(file_path)  # opening .heic images
+            jpg_pic_name = change_extension(file_path, ".jpg")
+            my_pic.save(jpg_pic_name, format="JPEG", optimize=True, quality=100)
+    except Exception as e:
+        print(f"Error converting {file_path} to jpg: {e}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="calculate duration times in given file"
-    )
+    parser = argparse.ArgumentParser(description="calculate duration times in given file")
     parser.add_argument("base_path")
     args = parser.parse_args()
 

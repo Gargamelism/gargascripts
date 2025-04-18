@@ -8,6 +8,7 @@ import boto3
 import botocore
 import json
 import time
+import logging
 from pprint import pprint
 from configparser import ConfigParser
 from pathlib import Path
@@ -26,9 +27,7 @@ def get_option(what_to_choose, options, sort_key=None):
         return options[0]
 
     options = sorted(options, key=sort_key)
-    options_prompt = [
-        f"{idx}) {sort_key(name)}" for idx, name in enumerate(options) if name
-    ]
+    options_prompt = [f"{idx}) {sort_key(name)}" for idx, name in enumerate(options) if name]
 
     print(f"Please choose {what_to_choose}:\n")
     print("\n".join(options_prompt))
@@ -48,9 +47,7 @@ def update_list_value_based_on_key(list, key, value):
 
 
 def get_profile():
-    process = subprocess.Popen(
-        "aws configure list-profiles", shell=True, stdout=subprocess.PIPE
-    )
+    process = subprocess.Popen("aws configure list-profiles", shell=True, stdout=subprocess.PIPE)
     process.wait()
     profiles = process.stdout.read().decode().split("\n")
     clean_profiles = [profile.strip() for profile in profiles]
@@ -67,11 +64,7 @@ def get_aws_profile_conf(profile):
     aws_config = ConfigParser()
     aws_config.read(os.path.join(os.path.expanduser("~"), ".aws/config"))
 
-    section_name = next(
-        profile_name
-        for profile_name in aws_config.sections()
-        if profile in profile_name
-    )
+    section_name = next(profile_name for profile_name in aws_config.sections() if profile in profile_name)
 
     return aws_config[section_name]
 
@@ -84,9 +77,7 @@ def get_profile_credentials(boto_client, profile):
             profile_section = get_aws_profile_conf(profile)
 
             # get access token
-            sso_cache_files = glob.glob(
-                os.path.join(os.path.expanduser("~"), ".aws/sso/cache/*")
-            )
+            sso_cache_files = glob.glob(os.path.join(os.path.expanduser("~"), ".aws/sso/cache/*"))
             latest_cache_path = max(sso_cache_files, key=os.path.getctime)
             latest_cache_conf = None
             with open(latest_cache_path, "r") as latest_cache_file:
@@ -120,15 +111,9 @@ def save_profile_credentials(profile_credentials):
     if not aws_credentials.has_section("default"):
         aws_credentials.add_section("default")
 
-    aws_credentials["default"]["aws_access_key_id"] = profile_credentials.get(
-        "accessKeyId"
-    )
-    aws_credentials["default"]["aws_secret_access_key"] = profile_credentials.get(
-        "secretAccessKey"
-    )
-    aws_credentials["default"]["aws_session_token"] = profile_credentials.get(
-        "sessionToken"
-    )
+    aws_credentials["default"]["aws_access_key_id"] = profile_credentials.get("accessKeyId")
+    aws_credentials["default"]["aws_secret_access_key"] = profile_credentials.get("secretAccessKey")
+    aws_credentials["default"]["aws_session_token"] = profile_credentials.get("sessionToken")
 
     aws_credentials.write(open(credentials_path, "w"))
 
@@ -136,15 +121,18 @@ def save_profile_credentials(profile_credentials):
 def login(parsed_args):
     print("logging in")
 
-    process = subprocess.Popen(
-        f"aws sso login --profile {parsed_args.profile}", shell=True
-    )
-    process.wait()
+    # Add logging for AWS operations
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.info("Starting AWS login process")
+    try:
+        process = subprocess.Popen(f"aws sso login --profile {parsed_args.profile}", shell=True)
+        process.wait()
+        logging.info("AWS login successful")
+    except Exception as e:
+        logging.error(f"AWS login failed: {e}")
 
     # write credentials so local processes can authenticate
-    profile_credentials = get_profile_credentials(
-        parsed_args.boto_client, parsed_args.profile
-    )
+    profile_credentials = get_profile_credentials(parsed_args.boto_client, parsed_args.profile)
     save_profile_credentials(profile_credentials)
 
 
@@ -200,9 +188,7 @@ def connect_to_eks(parsed_args):
     if len(clusters) > 1:
         cluster_name = get_option("cluster", clusters)
 
-    print(
-        f"aws eks --region {os.environ['AWS_REGION']} update-kubeconfig --name {cluster_name}"
-    )
+    print(f"aws eks --region {os.environ['AWS_REGION']} update-kubeconfig --name {cluster_name}")
     eks_login_process = subprocess.Popen(
         f"aws eks --region {os.environ['AWS_REGION']} update-kubeconfig --name {cluster_name}",
         shell=True,
@@ -216,9 +202,7 @@ def get_win_env_variable_command(key: str, value: str):
 
 def add_win_env_variables_command(commands: list):
     powershell_command = "; ".join(commands)
-    run_command = subprocess.Popen(
-        ["powershell.exe", "-C", powershell_command], shell=False
-    )
+    run_command = subprocess.Popen(["powershell.exe", "-C", powershell_command], shell=False)
     run_command.wait()
 
 
@@ -241,9 +225,7 @@ def update_db_pw_file(
                 key = key_transformer(key)
             if value_transformer:
                 value = value_transformer(value)
-            config_file_lines = update_list_value_based_on_key(
-                config_file_lines, key, value
-            )
+            config_file_lines = update_list_value_based_on_key(config_file_lines, key, value)
 
         config_file.seek(0)
         config_file.write("\n".join(config_file_lines))
@@ -290,9 +272,7 @@ def connect_to_db(parsed_args):
     sts_client = parsed_args.boto_client.client("sts")
     email = sts_client.get_caller_identity().get("UserId").split(":")[1]
 
-    db_clusters_endpoints = rds_client.describe_db_cluster_endpoints().get(
-        "DBClusterEndpoints"
-    )
+    db_clusters_endpoints = rds_client.describe_db_cluster_endpoints().get("DBClusterEndpoints")
 
     print(f"Found {len(db_clusters_endpoints)} endpoints")
     bash_variables_list = []
@@ -309,9 +289,7 @@ def connect_to_db(parsed_args):
         tokens.append((token_key, token))
 
     for token_key, token in tokens:
-        win_variables_commands_list.append(
-            get_win_env_variable_command(token_key, token)
-        )
+        win_variables_commands_list.append(get_win_env_variable_command(token_key, token))
         bash_variables_list.append(f"{token_key}={token}")
 
     start = time.time()
@@ -354,9 +332,7 @@ def get_cluster_arn(ecs_client):
 
     cluster = clusters_arn[0]
     if len(clusters) > 1:
-        cluster = get_option(
-            "cluster", clusters_arn, lambda cluster_arn: cluster_arn.split("/")[-1]
-        )
+        cluster = get_option("cluster", clusters_arn, lambda cluster_arn: cluster_arn.split("/")[-1])
 
     return cluster
 
@@ -364,9 +340,7 @@ def get_cluster_arn(ecs_client):
 def get_relevant_container(ecs_client, cluster_arn):
     tasks = ecs_client.list_tasks(cluster=cluster_arn)
 
-    tasks_details = ecs_client.describe_tasks(
-        cluster=cluster_arn, tasks=tasks.get("taskArns")
-    )
+    tasks_details = ecs_client.describe_tasks(cluster=cluster_arn, tasks=tasks.get("taskArns"))
 
     tasks = tasks_details.get("tasks")
     task = tasks[0]
@@ -435,9 +409,7 @@ def get_secret(secrets_manager_client):
         lambda secret: secret.get("Name"),
     )
 
-    secret_response = secrets_manager_client.get_secret_value(
-        SecretId=chosen_secret.get("ARN")
-    )
+    secret_response = secrets_manager_client.get_secret_value(SecretId=chosen_secret.get("ARN"))
 
     return secret_response
 
@@ -479,9 +451,7 @@ def set_secrets(parsed_args):
 
         additional_values = input("Add more values? [y/n]").casefold() == "y"
 
-    secrets_manager_client.update_secret(
-        SecretId=secret_response.get("ARN"), SecretString=json.dumps(secret_value)
-    )
+    secrets_manager_client.update_secret(SecretId=secret_response.get("ARN"), SecretString=json.dumps(secret_value))
     print(f"Secret {secret_response.get('Name')} updated")
 
 

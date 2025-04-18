@@ -1,5 +1,6 @@
 import argparse
 from progressbar import ProgressBar
+from concurrent.futures import ThreadPoolExecutor
 
 from helpers import get_files_in_base_path, calc_file_md5
 from sqlite_wrapper import SqliteWrapper
@@ -19,10 +20,13 @@ class PathHasher:
 
         for page in range(page_count):
             page_files = db_wrapper.paginate(files_table, page_size, page)
-            for file in page_files:
-                file_path = file[0]
-                file_md5 = calc_file_md5(file_path)
-                db_wrapper.insert(hash_table, [file_md5, file_path])
+
+            def hash_file(file):
+                file_md5 = calc_file_md5(file)
+                db_wrapper.insert(FILES_HASH_TABLE, [file_md5, file])
+
+            with ThreadPoolExecutor() as executor:
+                executor.map(hash_file, [file[0] for file in page_files])
 
             progress_bar.increment()
 
@@ -37,9 +41,7 @@ def calc_hashes(base_path, exclude_paths, db_wrapper: SqliteWrapper = None):
     print(f"getting files in {base_path}")
     relevant_files = get_files_in_base_path(
         base_path,
-        lambda file_path: not any(
-            exclude_path in file_path for exclude_path in exclude_paths
-        ),
+        lambda file_path: not any(exclude_path in file_path for exclude_path in exclude_paths),
     )
 
     db_wrapper.create_table(RELEVANT_FILES_TABLE, ["path TEXT"])
@@ -52,9 +54,7 @@ def calc_hashes(base_path, exclude_paths, db_wrapper: SqliteWrapper = None):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="calculate all md5 hashes of files in given path recursively"
-    )
+    parser = argparse.ArgumentParser(description="calculate all md5 hashes of files in given path recursively")
 
     parser.add_argument("--base-path", required=True)
     parser.add_argument("--exclude-paths", nargs="+")

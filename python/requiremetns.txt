@@ -8,6 +8,6 @@ pillow_heif==0.18.*
 pydub==0.25.*
 simpleaudio==1.0.*
 # sheet music generator
-musicscore==2.6.*
+music21==9.5.*
 numpy==1.26.*
 pydantic==2.11.*
