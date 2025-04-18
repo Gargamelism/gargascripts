@@ -11,3 +11,4 @@ simpleaudio==1.0.*
 music21==9.5.*
 numpy==1.26.*
 pydantic==2.11.*
+pytest==8.3.*

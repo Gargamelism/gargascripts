@@ -11,7 +11,7 @@ class Melody(BaseModel):
     time_signature: str = "4/4"
     tempo: int = 120
 
-    class Config:
+    class ConfigDict:
         arbitrary_types_allowed = True
 
 
