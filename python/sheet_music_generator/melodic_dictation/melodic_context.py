@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from music21 import note, key, meter, stream
-from typing import Any
+from typing import List, Any, Optional
 
 
 @dataclass
@@ -9,8 +9,8 @@ class MelodicContext:
 
     key: key.Key
     time_signature: meter.TimeSignature
-    notes: list[note.Note]
-    steps: list[Any]
+    notes: List[note.Note]
+    steps: List[Any]
     tempo: int = 60
     only_diatonic: bool = True
-    melody_stream: stream.Stream = None
+    melody_stream: Optional[stream.Stream] = None

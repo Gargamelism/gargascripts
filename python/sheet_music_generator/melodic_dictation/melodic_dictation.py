@@ -4,6 +4,7 @@ import random
 import numpy as np
 from music21 import key, stream, meter, note, tempo
 from pprint import pformat
+from typing import List, Optional
 
 from helper import Melody, get_key_notes
 from rule_engine.rule_engine import RuleEngine
@@ -16,19 +17,15 @@ from melodic_dictation.melodic_rules.minor_scale_variant_rule import MinorScaleV
 TEMPO = 60
 
 
-def generate_melodic_dictation_notes(args) -> str:
+def generate_melodic_dictation_notes(args: argparse.Namespace) -> stream.Stream:
     """
     Generate a melody using the rule engine
 
     Args:
-        rule_engine: RuleEngine instance
-        start_note: Starting note (string or Note object)
-        num_notes: Number of notes to generate
-        key_sig: Key signature
-        time_sig: Time signature
+        args (argparse.Namespace): Parsed command-line arguments.
 
     Returns:
-        music21 Stream object
+        stream.Stream: A music21 Stream object containing the generated melody.
     """
 
     context_key = key.Key(args.key)
@@ -80,7 +77,16 @@ def generate_melodic_dictation_notes(args) -> str:
     return context.melody_stream
 
 
-def generate_dictation_notes(args) -> Melody:
+def generate_dictation_notes(args: Optional[List[str]]) -> Melody:
+    """
+    Generate dictation notes based on the provided arguments.
+
+    Args:
+        args (Optional[List[str]]): Command-line arguments for generating dictation notes.
+
+    Returns:
+        Melody: A Melody object containing the generated notes.
+    """
     if args is None:
         args = []
 

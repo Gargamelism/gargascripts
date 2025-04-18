@@ -1,28 +1,29 @@
+from typing import Any
 from music21 import note
 
 
 class RuleBase:
     """Base class for all rules in the rule engine"""
 
-    def __init__(self, name: str, probability=0.5):
-        self._probability = probability
-        self._name = name
+    def __init__(self, name: str, probability: float = 0.5):
+        self._probability: float = probability
+        self._name: str = name
 
-    def condition(self, prev_step, context):
+    def condition(self, prev_step: Any, context: Any) -> bool:
         """Condition to check if the rule should be applied"""
         raise NotImplementedError("Subclasses should implement this method")
 
-    def action(self, prev_step, context) -> note.Note:
+    def action(self, prev_step: Any, context: Any) -> note.Note:
         """Action to perform if the condition is met"""
         raise NotImplementedError("Subclasses should implement this method")
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Name of the rule"""
         return self._name
 
     @property
-    def probability(self):
+    def probability(self) -> float:
         """Probability of the rule being applied"""
         return self._probability
 

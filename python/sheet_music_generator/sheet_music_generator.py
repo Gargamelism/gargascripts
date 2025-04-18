@@ -9,6 +9,7 @@ import pathlib
 import logging
 from datetime import datetime
 import subprocess
+from typing import List, Optional, Union
 
 from melodic_dictation.melodic_dictation import generate_dictation_notes
 from helper import Melody, get_key_notes, get_sound_font_path
@@ -23,7 +24,7 @@ OUTPUT_FORMATS = {
 }
 
 
-def generate_solfege_notes(args) -> Melody:
+def generate_solfege_notes(args: Optional[List[str]]) -> Melody:
     if args is None:
         args = []
 
@@ -65,7 +66,7 @@ def generate_solfege_notes(args) -> Melody:
     return Melody(notes=notes, key=parsed_args.key, time_signature=parsed_args.time, tempo=60)
 
 
-def generate_rhythm_notes(args):
+def generate_rhythm_notes(args: Optional[List[str]]) -> Melody:
     if args is None:
         args = []
 
@@ -129,6 +130,12 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     Example format: "C4-1.0 D4-0.5 E4-0.5 F4-1.0 G4-1.0 A4-0.5 B4-0.5 C5-1.0"
     """
 
+    # Add validation for key signature
+    valid_keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
+    if melody_obj.key not in valid_keys:
+        logging.error(f"Invalid key signature: {melody_obj.key}. Must be one of {valid_keys}.")
+        raise ValueError(f"Invalid key signature: {melody_obj.key}")
+
     # Create a new stream
     melody_stream = stream.Stream()
 
@@ -159,7 +166,7 @@ def create_melody(melody_obj: Melody) -> stream.Stream:
     return melody_stream
 
 
-def midi_to_wav(midi_file, wav_file, soundfont_path):
+def midi_to_wav(midi_file: str, wav_file: str, soundfont_path: str) -> bool:
     try:
         subprocess.run(
             [
@@ -186,7 +193,7 @@ def midi_to_wav(midi_file, wav_file, soundfont_path):
     return True
 
 
-def wav_to_mp3(wav_file, mp3_file):
+def wav_to_mp3(wav_file: str, mp3_file: str) -> bool:
     """
     Convert WAV to MP3 using ffmpeg (must be installed)
     """
@@ -214,7 +221,9 @@ def wav_to_mp3(wav_file, mp3_file):
         return False
 
 
-def save_score(melody: stream.Stream, output_format="musicxml", filename="", key="") -> pathlib.Path:
+def save_score(
+    melody: stream.Stream, output_format: str = "musicxml", filename: str = "", key: str = ""
+) -> pathlib.Path:
     """
     Save the score in the specified format
     Supported formats: musicxml, midi, pdf
@@ -243,10 +252,18 @@ def save_score(melody: stream.Stream, output_format="musicxml", filename="", key
         wav_to_mp3(wav_path, mp3_path)
         return pathlib.Path(mp3_path)
 
-    return melody.write(output_format, f"{out_put_file}{extension}")
+    # Add logging for file generation
+    logging.info(f"Saving score to {out_put_file}{extension}")
+    try:
+        result_path = melody.write(output_format, f"{out_put_file}{extension}")
+        logging.info(f"Score successfully saved to {result_path}")
+        return result_path
+    except Exception as e:
+        logging.error(f"Failed to save score to {out_put_file}{extension}. Error: {e}")
+        raise
 
 
-def main(args):
+def main(args: List[str]) -> None:
     parser = argparse.ArgumentParser(description="Generate a music score from command line")
     parser.add_argument(
         "--random_type",

@@ -1,5 +1,5 @@
 import random
-from typing import Any
+from typing import Any, List
 from music21 import scale, note
 
 from rule_engine.rule_base import RuleBase
@@ -8,54 +8,51 @@ from rule_engine.rule_base import RuleBase
 class RuleEngine:
     """Rule engine for determining the next note based on previous notes"""
 
-    def __init__(self, rules: list[RuleBase], context: Any, post_prosess_rules: list[RuleBase] = None):
-        self._rules = rules
-        self._context = context
-        self._post_process_rules = post_prosess_rules or []
+    def __init__(self, rules: List[RuleBase], context: Any, post_prosess_rules: List[RuleBase] = None):
+        self._rules: List[RuleBase] = rules
+        self._context: Any = context
+        self._post_process_rules: List[RuleBase] = post_prosess_rules or []
 
-    def add_rule(self, rule: RuleBase):
+    def add_rule(self, rule: RuleBase) -> None:
         """
         Add a rule to the engine
 
         Args:
-            name (str): Name of the rule
-            condition (callable): Function that takes prev_note and returns bool
-            action (callable): Function that takes prev_note and returns a new note
-            probability (float): Probability of applying this rule when condition is met
+            rule (RuleBase): The rule to add.
         """
         self._rules.append(rule)
 
-    def remove_rule(self, name):
+    def remove_rule(self, name: str) -> None:
         """Remove a rule by name"""
-        self._rules = [rule for rule in self._rules if rule["name"] != name]
+        self._rules = [rule for rule in self._rules if rule.name != name]
 
-    def set_key(self, key_name):
+    def set_key(self, key_name: str) -> None:
         """Set the current key for the rule engine"""
-        self.current_key = key_name
-        self.default_scale = scale.MajorScale(key_name)
+        self.current_key: str = key_name
+        self.default_scale: scale.Scale = scale.MajorScale(key_name)
 
-    def reset_rules(self, rules: list[RuleBase]):
+    def reset_rules(self, rules: List[RuleBase]) -> None:
         """Clear all rules"""
         self._rules = rules
 
-    def apply_post_processing(self, note_obj: note.Note, context=None):
+    def apply_post_processing(self, note_obj: note.Note, context: Any = None) -> note.Note:
         """Apply all enabled post-processing rules to the note"""
-        result = note_obj
+        result: note.Note = note_obj
         for rule in self._post_process_rules:
             if rule.condition:
                 result = rule.action(result, context)
         return result
 
-    def get_next_note(self, prev_note, context=None):
+    def get_next_note(self, prev_note: note.Note, context: Any = None) -> note.Note:
         """
         Determine the next note based on the rules and previous note
 
         Args:
-            prev_note: The previous note (music21 Note object or note string)
-            context: Additional context (e.g., key, time signature)
+            prev_note (note.Note): The previous note.
+            context (Any): Additional context (e.g., key, time signature).
 
         Returns:
-            music21 Note object
+            note.Note: The next note determined by the rules.
         """
 
         # Convert string to Note object if needed
@@ -63,7 +60,7 @@ class RuleEngine:
             prev_note = note.Note(prev_note)
 
         # Check each rule in order
-        applicable_rules: list[RuleBase] = []
+        applicable_rules: List[RuleBase] = []
         for rule in self._rules:
             if rule.condition(prev_note, context):
                 # Only apply the rule based on its probability
