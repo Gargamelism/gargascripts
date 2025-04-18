@@ -29,7 +29,7 @@ class MelodicBaseRule(RuleBase):
         """Get a note by stepping a certain number of scale steps from previous note"""
 
         # Get the scale degree of the previous note
-        prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note)
+        prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note, comparisonAttribute="step")
 
         # Calculate the number of half steps to the target scale degree
         half_steps = context.key.intervalBetweenDegrees(prev_scale_degree, interval_steps).semitones
