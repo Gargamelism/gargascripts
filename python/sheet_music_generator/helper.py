@@ -1,5 +1,6 @@
 import os
 import random
+import argparse
 from music21 import key, stream
 from pydantic import BaseModel, ConfigDict
 
@@ -52,3 +53,10 @@ def get_sound_font_path(sound_font_folder_path: str):
     sound_font_file = os.path.join(sound_font_folder_path, sound_font_file)
 
     return sound_font_file
+
+
+def positive_num(num: str) -> int:
+    num = int(num)
+    if num < 1:
+        raise argparse.ArgumentTypeError("Must be a positive number")
+    return num

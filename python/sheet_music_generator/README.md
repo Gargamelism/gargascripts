@@ -19,6 +19,10 @@
     python sheet_music_generator.py
     ```
 
+## Tests
+Run ``` export PYTHONPATH=$PYTHONPATH:~/dev/gargascripts/python/sheet_music_generator```
+Then ```python3 -m pytest -vv```
+
 ## Road map
 1. Make chances change - as more "staying the same" happens - increase chance of leap, after leap increase chance of staying the same/step
 1. Add harmonic dictation

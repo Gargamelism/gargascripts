@@ -6,11 +6,19 @@ from music21 import key, stream, meter, note, tempo
 from pprint import pformat
 from typing import List, Optional
 
-from helper import Melody, get_key_notes
+from helper import Melody, positive_num
 from rule_engine.rule_engine import RuleEngine
 from melodic_dictation.melodic_context import MelodicContext
-from melodic_dictation.melodic_rules.step_movement_rule import StepMovementRule
-from melodic_dictation.melodic_rules.leap_movement_rule import LeapMovementRule
+from melodic_dictation.melodic_rules.step_movement_rule import StepDownMovementRule, StepUpMovementRule
+from melodic_dictation.melodic_rules.small_leap_movement_rule import SmallLeapDownMovementRule, SmallLeapUpMovementRule
+from melodic_dictation.melodic_rules.medium_leap_movement_rule import (
+    MediumLeapDownMovementRule,
+    MediumLeapUpMovementRule,
+)
+from melodic_dictation.melodic_rules.large_leap_movement_rule import (
+    LargeLeapDownMovementRule,
+    LargeLeapUpMovementRule,
+)
 from melodic_dictation.melodic_rules.return_to_tonic_rule import ReturnToTonicRule
 from melodic_dictation.melodic_rules.minor_scale_variant_rule import MinorScaleVariantRule
 
@@ -32,14 +40,19 @@ def generate_melodic_dictation_notes(args: argparse.Namespace) -> stream.Stream:
     context = MelodicContext(
         key=context_key,
         time_signature=meter.TimeSignature(args.time),
-        notes=context_key.pitches,
         steps=[],
         melody_stream=stream.Stream(),
     )
     rule_engine = RuleEngine(
         rules=[
-            StepMovementRule(probability=0.6),
-            LeapMovementRule(probability=0.3),
+            StepDownMovementRule(probability=0.6),
+            StepUpMovementRule(probability=0.6),
+            SmallLeapDownMovementRule(probability=0.4),
+            SmallLeapUpMovementRule(probability=0.4),
+            MediumLeapDownMovementRule(probability=0.3),
+            MediumLeapUpMovementRule(probability=0.3),
+            LargeLeapDownMovementRule(probability=0.1),
+            LargeLeapUpMovementRule(probability=0.1),
             ReturnToTonicRule(probability=0.1),
         ],
         context=context,
@@ -62,7 +75,7 @@ def generate_melodic_dictation_notes(args: argparse.Namespace) -> stream.Stream:
     context.melody_stream.append(tonic_note)
 
     # Add the start note
-    current_note = note.Note(random.choice(context.notes), type="quarter")
+    current_note = note.Note(random.choice(context.key.pitches), type="quarter")
     context.melody_stream.append(current_note)
 
     # Generate the rest of the notes
@@ -111,7 +124,7 @@ def generate_dictation_notes(args: Optional[List[str]]) -> Melody:
 
     parser.add_argument("--only_diatonic", "-d", default=True, action="store_true", help="Use only diatonic notes")
 
-    parser.add_argument("--length", "-l", default=8, type=int, help="Number of notes in the melody")
+    parser.add_argument("--length", "-l", default=8, type=positive_num, help="Number of notes in the melody")
 
     default_octaves = ["4"]
     parser.add_argument(

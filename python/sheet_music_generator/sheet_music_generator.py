@@ -12,7 +12,7 @@ import subprocess
 from typing import List, Optional, Union
 
 from melodic_dictation.melodic_dictation import generate_dictation_notes
-from helper import Melody, get_key_notes, get_sound_font_path
+from helper import Melody, get_key_notes, get_sound_font_path, positive_num
 
 SOUND_FONT_FOLDER_PATH = "/home/gargamel/soundfonts"
 
@@ -32,8 +32,10 @@ def generate_solfege_notes(args: Optional[List[str]]) -> Melody:
     parser = argparse.ArgumentParser(description="Solfege parameters")
 
     # Define the key signature
-    keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
-    default_key = random.choice(keys)
+    major_keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
+    minor_keys = [major_key.lower() for major_key in major_keys]
+    used_keys = major_keys + minor_keys
+    default_key = random.choice(used_keys)
     parser.add_argument("--key", "-k", default=default_key, help='Key signature (e.g., "C", "G", "F#")')
 
     time_signatures = ["3/4", "4/4"]
@@ -42,7 +44,7 @@ def generate_solfege_notes(args: Optional[List[str]]) -> Melody:
 
     parser.add_argument("--only_diatonic", "-d", default=True, action="store_true", help="Use only diatonic notes")
 
-    parser.add_argument("--length", "-l", default=32, type=int, help="Number of notes in the melody")
+    parser.add_argument("--length", "-l", default=32, type=positive_num, help="Number of notes in the melody")
 
     parsed_args, unkown_args = parser.parse_known_args(args)
 
@@ -91,7 +93,14 @@ def generate_rhythm_notes(args: Optional[List[str]]) -> Melody:
         "--max_length", "-max", type=float, help="Maximum note length in quarter notes (e.g., 4.0 for whole note)"
     )
 
-    parser.add_argument("--length", "-l", default=32, type=int, help="Number of notes in the melody")
+    parser.add_argument(
+        "--length",
+        "-l",
+        default=32,
+        type=int,
+        help="Number of notes in the melody",
+        choices=range(1, 10000),  # Ensure length is a positive integer
+    )
 
     parsed_args, unknown_args = parser.parse_known_args(args)
 

@@ -9,8 +9,7 @@ class MelodicContext:
 
     key: key.Key
     time_signature: meter.TimeSignature
-    notes: List[note.Note]
+    melody_stream: Optional[stream.Stream]
     steps: List[Any]
     tempo: int = 60
     only_diatonic: bool = True
-    melody_stream: Optional[stream.Stream] = None

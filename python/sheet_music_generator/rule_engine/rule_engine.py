@@ -39,7 +39,7 @@ class RuleEngine:
         """Apply all enabled post-processing rules to the note"""
         result: note.Note = note_obj
         for rule in self._post_process_rules:
-            if rule.condition:
+            if rule.condition(note_obj, context):
                 result = rule.action(result, context)
         return result
 

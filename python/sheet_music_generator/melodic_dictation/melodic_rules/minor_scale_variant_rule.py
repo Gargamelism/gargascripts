@@ -13,15 +13,15 @@ class MinorScaleVariantRule(MelodicBaseRule):
 
     def condition(self, prev_note, context: MelodicContext):
         # Only apply this rule if we're in a minor key
-        return context.key.mode == "minor" and len(context.steps) > 0 and prev_note is not None
+        return context.key.mode == "minor" and len(context.melody_stream.notes) > 0 and prev_note is not None
 
     def action(self, current_note: note.Note, context: MelodicContext):
         # Create a copy to modify
         new_note = note.Note(current_note.pitch)
 
         # if previous note is 6th and it is raised, and the current note is 7th then we must raise it
-        prev_note = context.notes[-1]
-        prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note)
+        prev_note = context.melody_stream[-1]
+        prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note, comparisonAttribute="step")
         current_note_degree = context.key.getScaleDegreeFromPitch(current_note.pitch)
 
         # Check if previous note was the 6th scale degree and was raised
@@ -92,7 +92,7 @@ class MinorScaleVariantRule(MelodicBaseRule):
 
         # Determine if we're in an ascending or descending passage
         if len(context.melody_stream.notes) >= (2 + context.time_signature.numerator):
-            last_interval = context.notes[-1].midi - context.notes[-2].midi
+            last_interval = context.melody_stream.notes[-1].midi - context.melody_stream.notes[-2].midi
             is_ascending = last_interval > 0
         else:
             is_ascending = random.choice([True, False])

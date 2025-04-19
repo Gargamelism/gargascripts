@@ -1,3 +1,4 @@
+import logging
 from music21 import note, key
 
 from rule_engine.rule_base import RuleBase
@@ -31,9 +32,13 @@ class MelodicBaseRule(RuleBase):
         # Get the scale degree of the previous note
         prev_scale_degree = context.key.getScaleDegreeFromPitch(prev_note, comparisonAttribute="step")
 
+        first_degree = min(prev_scale_degree, (prev_scale_degree + interval_steps))
+        second_degree = max(prev_scale_degree, (prev_scale_degree + interval_steps))
+        logging.warning(f"first_degree: {first_degree}, second_degree: {second_degree}")
         # Calculate the number of half steps to the target scale degree
-        half_steps = context.key.intervalBetweenDegrees(prev_scale_degree, interval_steps).semitones
+        half_steps = context.key.intervalBetweenDegrees(first_degree, second_degree).semitones
 
+        half_steps = half_steps if interval_steps > 0 else -half_steps
         # Transpose the note by the calculated half steps
         new_note = prev_note.transpose(half_steps)
 
@@ -42,7 +47,7 @@ class MelodicBaseRule(RuleBase):
                 "rule_name": self._name,
                 "prev_note": prev_note,
                 "new_note": new_note,
-                "interval": interval_steps,
+                "half_steps": half_steps,
             }
         )
 
