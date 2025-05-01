@@ -92,7 +92,7 @@ class MinorScaleVariantRule(MelodicBaseRule):
 
         # Determine if we're in an ascending or descending passage
         if len(context.melody_stream.notes) >= (2 + context.time_signature.numerator):
-            last_interval = context.melody_stream.notes[-1].midi - context.melody_stream.notes[-2].midi
+            last_interval = context.melody_stream.notes[-1].pitch.midi - context.melody_stream.notes[-2].pitch.midi
             is_ascending = last_interval > 0
         else:
             is_ascending = random.choice([True, False])
