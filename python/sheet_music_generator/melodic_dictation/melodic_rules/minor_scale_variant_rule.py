@@ -59,6 +59,10 @@ class MinorScaleVariantRule(MelodicBaseRule):
         # If we didn't modify the note, return the original note from the previous rule
         return current_note
 
+    def post_action_probability(self) -> float:
+        """minor scale probability doesn't need to be adjusted"""
+        return self.probability
+
     def _transpose_half_tone_up(self, some_note: note.Note):
         """Transpose the note up by a half tone keeping scale correctness."""
         accidental_name = "natural"

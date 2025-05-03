@@ -41,6 +41,7 @@ class RuleEngine:
         for rule in self._post_process_rules:
             if rule.condition(note_obj, context):
                 result = rule.action(result, context)
+                rule.post_action_probability()  # Update probability after action
         return result
 
     def get_next_note(self, prev_note: note.Note, context: Any = None) -> note.Note:
@@ -82,8 +83,9 @@ class RuleEngine:
             # Choose a rule based on probability
             chosen_rule = random.choices(applicable_rules, weights=normalized_probs, k=1)[0]
             chosen_note = chosen_rule.action(prev_note, context)
+            chosen_rule.post_action_probability()
 
         chosen_note = self.apply_post_processing(chosen_note, context)
-        chosen_note.volume.velocity = random.randint(90, 120)
+        chosen_note.volume.velocity = random.randint(70, 120)
 
         return chosen_note

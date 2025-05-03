@@ -17,6 +17,11 @@ class RuleBase:
         """Action to perform if the condition is met"""
         raise NotImplementedError("Subclasses should implement this method")
 
+    def post_action_probability(self) -> float:
+        """Post action probability for the rule, should set self._probability and return it (for reference)"""
+        # This method is a placeholder and should be implemented in subclasses
+        raise NotImplementedError("Subclasses must implement the 'post_action_probability' method.")
+
     @property
     def name(self) -> str:
         """Name of the rule"""
@@ -26,6 +31,13 @@ class RuleBase:
     def probability(self) -> float:
         """Probability of the rule being applied"""
         return self._probability
+
+    @probability.setter
+    def probability(self, value: float) -> None:
+        """Set the probability of the rule being applied"""
+        if not (0 <= value <= 1):
+            raise ValueError("Probability must be between 0 and 1")
+        self._probability = value
 
     def __str__(self):
         return f"Rule: {self._name}, Probability: {self._probability}"

@@ -12,6 +12,11 @@ class MediumLeapUpMovementRule(MelodicBaseRule):
     def action(self, prev_note, context):
         return self._get_note_by_interval(prev_note, random.choice([3, 4]), context)
 
+    def post_action_probability(self) -> float:
+        """After a medium leap up we want to decrease the probability of another large leap up"""
+        self.probability *= 0.75
+        return self.probability
+
 
 class MediumLeapDownMovementRule(MelodicBaseRule):
     def __init__(self, probability=0.15):
@@ -22,3 +27,8 @@ class MediumLeapDownMovementRule(MelodicBaseRule):
 
     def action(self, prev_note, context):
         return self._get_note_by_interval(prev_note, random.choice([-4, -3]), context)
+
+    def post_action_probability(self) -> float:
+        """After a medium leap down we want to decrease the probability of another large leap down"""
+        self.probability *= 0.75
+        return self.probability

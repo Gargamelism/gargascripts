@@ -12,6 +12,11 @@ class MockRule(RuleBase):
     def action(self, prev_step, context):
         return note.Note("C4")
 
+    def post_action_probability(self) -> float:
+        # Mock implementation
+        self.probability *= 0.9
+        return self.probability
+
 
 class MockRuleAlwaysTrue(RuleBase):
     def condition(self, prev_step, context):
@@ -20,6 +25,11 @@ class MockRuleAlwaysTrue(RuleBase):
     def action(self, prev_step, context):
         return note.Note("C4")
 
+    def post_action_probability(self) -> float:
+        # Mock implementation
+        self.probability *= 0.9
+        return self.probability
+
 
 class MockRuleAlwaysFalse(RuleBase):
     def condition(self, prev_step, context):
@@ -27,6 +37,11 @@ class MockRuleAlwaysFalse(RuleBase):
 
     def action(self, prev_step, context):
         return note.Note("D4")
+
+    def post_action_probability(self) -> float:
+        # Mock implementation
+        self.probability *= 0.9
+        return self.probability
 
 
 @pytest.fixture
@@ -80,6 +95,8 @@ def test_rule_engine_with_probabilities():
     prev_note = note.Note("D4")
     next_note = engine.get_next_note(prev_note, context)
     assert next_note.name == "C", f"Expected note name to be 'C', but got {next_note.name}"
+    # Verify that post_action_probability was applied
+    assert rules[1].probability < 1.0, "Expected probability to decrease after action"
 
 
 def test_add_rule(rule_engine):
@@ -111,3 +128,5 @@ def test_apply_post_processing(rule_engine, mock_context):
     rule_engine._post_process_rules.append(post_rule)
     result_note = rule_engine.apply_post_processing(note.Note("D4"), mock_context)
     assert result_note.name == "C", f"Expected post-processed note to be 'C', but got {result_note.name}"
+    # Verify that post_action_probability was applied
+    assert post_rule.probability < 1.0, "Expected probability to decrease after post-processing"

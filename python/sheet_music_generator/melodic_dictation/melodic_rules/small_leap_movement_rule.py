@@ -12,6 +12,10 @@ class SmallLeapUpMovementRule(MelodicBaseRule):
     def action(self, prev_note, context):
         return self._get_note_by_interval(prev_note, random.choice([2, 3]), context)
 
+    def post_action_probability(self) -> float:
+        """Small leap up should not affect the probability of future leaps"""
+        return self.probability
+
 
 class SmallLeapDownMovementRule(MelodicBaseRule):
     def __init__(self, probability=0.15):
@@ -22,3 +26,7 @@ class SmallLeapDownMovementRule(MelodicBaseRule):
 
     def action(self, prev_note, context):
         return self._get_note_by_interval(prev_note, random.choice([-3, -2]), context)
+
+    def post_action_probability(self) -> float:
+        """Small leap down should not affect the probability of future leaps"""
+        return self.probability

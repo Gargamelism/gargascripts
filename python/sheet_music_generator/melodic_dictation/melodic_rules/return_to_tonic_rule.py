@@ -39,3 +39,8 @@ class ReturnToTonicRule(MelodicBaseRule):
             }
         )
         return new_note
+
+    def post_action_probability(self) -> float:
+        """After returning to tonic, we want to decrease the probability of returning to tonic again by just a bit"""
+        self.probability *= 0.95
+        return self.probability

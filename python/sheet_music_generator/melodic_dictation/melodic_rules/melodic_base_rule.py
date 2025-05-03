@@ -16,16 +16,6 @@ class MelodicBaseRule(RuleBase):
 
         super().__init__(name=name, probability=probability)
 
-    def condition(self, prev_note: note.Note, context: MelodicContext) -> bool:
-        raise NotImplementedError("Subclasses must implement the 'condition' method.")
-
-    def action(self, prev_note: note.Note, context: MelodicContext) -> note.Note:
-        raise NotImplementedError("Subclasses must implement the 'action' method.")
-
-    @property
-    def probability(self) -> float:
-        return self._probability
-
     def _get_note_by_interval(self, prev_note: note.Note, interval_steps: int, context: MelodicContext) -> note.Note:
         """Get a note by stepping a certain number of scale steps from previous note"""
 
