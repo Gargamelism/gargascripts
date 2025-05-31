@@ -106,6 +106,8 @@ def generate_dictation_notes(args: Optional[List[str]]) -> Melody:
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Solfege parameters")
 
+    parser.add_argument("--key", "-k", default=None, type=str, help="Key signature (e.g., 'C', 'G#', 'db', etc.)")
+
     parser.add_argument("--d-type", "-dt", choices=["melodic"], default="melodic", help="Type of dictation to generate")
 
     parser.add_argument(
@@ -140,13 +142,16 @@ def generate_dictation_notes(args: Optional[List[str]]) -> Melody:
 
     # Define the key signature
     major_keys = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]
-    minor_keys = [key.lower() for key in major_keys]
+    minor_keys = ["a", "e", "b", "f#", "c#", "g#", "d#", "db", "d", "g", "c", "f", "bb", "eb", "ab"]
     used_keys = (
         major_keys + minor_keys
         if parsed_args.scale_type == "both"
         else major_keys if parsed_args.scale_type == "major" else minor_keys
     )
-    parsed_args.key = random.choice(used_keys)
+    if parsed_args.key is None:
+        parsed_args.key = random.choice(used_keys)
+    if parsed_args.key not in used_keys:
+        raise ValueError(f"Invalid key signature '{parsed_args.key}'. Must be one of {used_keys}.")
 
     notes = {
         "melodic": generate_melodic_dictation_notes,
