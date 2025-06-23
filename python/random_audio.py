@@ -108,6 +108,66 @@ def get_continous_random_audio_details(count, cb):
     print("Done!")
 
 
+def generate_warm_up(args):
+    random_key = random.choice(KEYS)
+    print(f"key: {random_key}")
+
+    note = get_random_note()
+    print(f"note: {note}")
+
+    piano_voice_number = random.randint(1, 60)
+    print(f"voice: {piano_voice_number}")
+
+    random_license_plate = get_random_license_plate()
+    print(f"license plate: {random_license_plate}")
+
+    tonal_code = list(range(1, 17))
+    random.shuffle(tonal_code)
+    print(f"tonal code: {tonal_code}")
+
+
+def continuos_apam(args):
+    random_key = random.choice(KEYS)
+    print(f"key: {random_key}")
+
+    piano_voice_number = random.randint(1, 60)
+    print(f"voice: {piano_voice_number}")
+
+    i = 0
+    while i == 0 or input("more?") != "n":
+        i = i + 1
+        print(f"{i})")
+        step = random.randint(1, 16)
+        note_in_step = 0
+        match step:
+            case step if step == 1:
+                note_in_step = random.randint(2, 5)
+            case step if step == 2:
+                note_in_step = random.randint(1, 4)
+            case step if step == 3:
+                note_in_step = random.randint(2, 4)
+            case step if step == 4:
+                note_in_step = random.randint(4, 6)
+            case step if step == 5:
+                note_in_step = random.randint(2, 3)
+            case step if step == 6:
+                note_in_step = random.randint(1, 2)
+            case step if step == 7:
+                note_in_step = 2
+            case step if step == 8:
+                note_in_step = random.randint(2, 6)
+            case step if step >= 9 and step <= 16:
+                note_in_step = random.randint(1, 2)
+
+        print(
+            [
+                f"scale: {random.randint(1,4)}",
+                f"step: {step}",
+                f"note in step: {note_in_step}",
+            ]
+        )
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Generate a random audio detail.")
     parser.add_argument("--warm-up", action="store_true", help="Flag to generate warm up random details")
@@ -116,6 +176,9 @@ def build_parser():
     parser.add_argument("--keys", type=int, help="Number of random keys to generate")
     parser.add_argument("--chords", type=int, help="Number of random chords to generate")
     parser.add_argument("--solfege", type=int, help="Number of random solfege to generate")
+    parser.add_argument(
+        "--apam", action="store_true", help="Flag to generate a random APAM (Arnak Pelephone Maftechot)"
+    )
 
     args = parser.parse_args()
 
@@ -130,21 +193,8 @@ def main():
     args = build_parser()
 
     if args.warm_up:
-        random_key = random.choice(KEYS)
-        print(f"key: {random_key}")
+        generate_warm_up(args)
 
-        note = get_random_note()
-        print(f"note: {note}")
-
-        piano_voice_number = random.randint(1, 60)
-        print(f"voice: {piano_voice_number}")
-
-        random_license_plate = get_random_license_plate()
-        print(f"license plate: {random_license_plate}")
-
-        tonal_code = list(range(1, 17))
-        random.shuffle(tonal_code)
-        print(f"tonal code: {tonal_code}")
     if args.timer:
         print(f"Countdown timer set for {args.timer} minutes.")
         run_timer(args.timer)
@@ -156,6 +206,9 @@ def main():
         get_continous_random_audio_details(args.chords, get_random_chord)
     if args.solfege:
         get_continous_random_audio_details(args.solfege, lambda: get_random_solfege(16))
+
+    if args.apam:
+        continuos_apam(args)
 
 
 if __name__ == "__main__":
