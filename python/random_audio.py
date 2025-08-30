@@ -12,6 +12,8 @@ KEYS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 INTERVALS = ["m2", "M2", "m3", "M3", "P4", "T", "P5", "m6", "M6", "m7", "M7", "P8"]
 CHORD_TYPES = ["major", "minor", "diminished", "augmented"]
 CHORD_INVERSION_TYPES = ["root", "first inversion", "second inversion"]
+MAJOR_DEGREE_NOTES = ["I", "II", "III", "IV", "V", "VI", "VII"]
+MINOR_DEGREE_NOTES = ["I", "II", "III", "IV", "V", "VI", "VI#", "VII", "VII#"]
 
 
 def generate_prompt(key, scale, meter, bpm):
@@ -94,8 +96,8 @@ def get_random_chord():
 def get_random_solfege(notes_count):
     key = random.choice(KEYS)
     print(f"key: {key}")
-    solfege = [str(random.randint(-5, 8)) for _ in range(notes_count)]
-    solfege = [f"{note} |" if (i + 1) % 4 == 0 else note for i, note in enumerate(solfege)]
+
+    solfege = [f"{random.choice(MINOR_DEGREE_NOTES)}{random.randint(1, 2)}" for _ in range(notes_count)]
     print(" ".join(solfege))
 
 
@@ -205,7 +207,7 @@ def main():
     if args.chords:
         get_continous_random_audio_details(args.chords, get_random_chord)
     if args.solfege:
-        get_continous_random_audio_details(args.solfege, lambda: get_random_solfege(16))
+        get_continous_random_audio_details(args.solfege, lambda: get_random_solfege(args.solfege))
 
     if args.apam:
         continuos_apam(args)
