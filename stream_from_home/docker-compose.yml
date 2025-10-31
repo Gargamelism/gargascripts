@@ -1,0 +1,36 @@
+services:
+
+  gonic:
+    image: sentriz/gonic:v0.19.0
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    environment:
+      - TZ
+      - GONIC_MUSIC_PATH=/music,/pending
+      - GONIC_PLAYLISTS_PATH=/playlists
+      - GONIC_SCAN_INTERVAL=30
+      - GONIC_HTTP_READ_TIMEOUT=300
+      - GONIC_HTTP_WRITE_TIMEOUT=300
+    ports:
+      - 4747:80
+    volumes:
+      - ${GONIC_CONFIG_PATH}:/config:rw # gonic config
+      - ${GONIC_DATA_PATH}:/data:rw # gonic db etc
+      - ${GONIC_MUSIC_PATH}:/music:ro # your music
+      - ${GONIC_PENDING_PATH}:/pending:ro # your music
+      - ${GONIC_PLAYLISTS_PATH}:/playlists # your playlists
+      - ${GONIC_CACHE_PATH}:/cache # transcode / covers / etc cache dir
+    tmpfs:
+      - /tmp
+
+  pinggy:
+    image: pinggy/pinggy
+    ports:
+      - 4300:4300
+    stdin_open: true
+    tty: true
+    command: -p 443 -R0:gonic:80 -L0.0.0.0:4300:gonic:80 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 ${PINGGY_CREDENTIAL}
+    depends_on:
+      - gonic
