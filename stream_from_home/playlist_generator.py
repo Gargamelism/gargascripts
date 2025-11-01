@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import argparse
 from typing import List, Optional, Tuple, Dict, Set
@@ -171,14 +172,66 @@ def convert_to_server_paths(
     return server_paths
 
 
+def get_next_playlist_number(output_path: str) -> Tuple[int, str]:
+    """
+    Check if filename needs a numeric prefix and determine the next number.
+    Returns tuple of (next_number, updated_filename).
+    If the file already has a prefix but would cause a clash, it gets renumbered.
+    """
+    filename = os.path.basename(output_path)
+    directory = os.path.dirname(os.path.abspath(output_path))
+
+    # Scan directory for existing numbered playlists
+    max_number = 0
+    existing_files = set()
+    try:
+        if os.path.exists(directory):
+            for existing_file in os.listdir(directory):
+                existing_files.add(existing_file.lower())
+                match = re.match(r"^(\d{3})_", existing_file)
+                if match:
+                    num = int(match.group(1))
+                    max_number = max(max_number, num)
+    except (OSError, PermissionError):
+        pass
+
+    # Check if filename already has 3-digit prefix
+    prefix_match = re.match(r"^(\d{3})_", filename)
+    if prefix_match:
+        # File has a prefix - check if it would clash
+        if filename.lower() not in existing_files:
+            # No clash, keep the existing prefix
+            return None, output_path
+        # Clash detected - fall through to renumber
+
+    # Next number is max + 1, or 1 if no numbered files exist
+    next_number = max_number + 1
+    new_filename = f"{next_number:03d}_{filename}"
+
+    # If filename already had a prefix, remove it before adding new one
+    if prefix_match:
+        base_filename = re.sub(r"^\d{3}_", "", filename)
+        new_filename = f"{next_number:03d}_{base_filename}"
+
+    new_path = os.path.join(directory, new_filename)
+
+    return next_number, new_path
+
+
 def save_playlist(playlist_content: List[str], output_path: str) -> None:
     """
     Save the playlist to a file.
     Wraps paths in quotes to handle spaces and special characters properly.
+    Automatically adds numeric prefix if not present.
     """
     # Ensure the file has .m3u extension
     if not output_path.endswith(".m3u"):
         output_path += ".m3u"
+
+    # Add numeric prefix if needed
+    number, output_path = get_next_playlist_number(output_path)
+    if number:
+        print(f"Adding prefix {number:03d}_ to filename")
 
     # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
@@ -225,6 +278,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Server prefix for pending music (default: /pending/)",
     )
     parser.add_argument(
+        "--keep-local-paths",
+        action="store_true",
+        help="Convert local paths to server paths in the playlist",
+    )
+    parser.add_argument(
         "-n",
         "--number",
         type=int,
@@ -232,6 +290,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Number of albums to include (default: 10)",
     )
     return parser.parse_args()
+
 
 def get_album_tracks(playlist_paths) -> List[str]:
     """
@@ -261,7 +320,11 @@ def get_album_tracks(playlist_paths) -> List[str]:
         if os.path.isdir(path):
             for root, _, files in os.walk(path):
                 # filter and sort to keep deterministic ordering
-                music_files = [file_name for file_name in files if os.path.splitext(file_name)[1].lower() in music_exts]
+                music_files = [
+                    file_name
+                    for file_name in files
+                    if os.path.splitext(file_name)[1].lower() in music_exts
+                ]
                 music_files.sort()
                 for file_name in music_files:
                     full = os.path.abspath(os.path.join(root, file_name))
@@ -297,18 +360,18 @@ def generate_playlist() -> None:
     # Try to add a preferred band album
     playlist_tracks = get_album_tracks(playlist_paths)
 
-    # Initialize roots dictionary with the main music folder
-    roots = {music_base: args.music_prefix, pending_base: args.pending_prefix}
-
-    # Convert paths using the collected roots
-    playlist_content = convert_to_server_paths(
-        paths=playlist_tracks,
-        roots=roots,
-        server_prefix=args.music_prefix,  # Use music prefix as default
-    )
+    if not args.keep_local_paths:
+        # Initialize roots dictionary with the main music folder
+        roots = {music_base: args.music_prefix, pending_base: args.pending_prefix}
+        # Convert paths using the collected roots
+        playlist_tracks = convert_to_server_paths(
+            paths=playlist_tracks,
+            roots=roots,
+            server_prefix=args.music_prefix,  # Use music prefix as default
+        )
 
     # Save the playlist
-    save_playlist(playlist_content, args.output)
+    save_playlist(playlist_tracks, args.output)
 
 
 if __name__ == "__main__":
