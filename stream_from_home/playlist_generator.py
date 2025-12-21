@@ -96,26 +96,30 @@ def get_albums(base_folder: str, number_of_albums: int) -> List[str]:
     return playlist_paths
 
 
-def get_preferred_album() -> str:
+def get_preferred_album(preferred_base: str) -> Optional[str]:
     """Try to get an album from the predefined list of preferred bands."""
-    preferred_bands = {
-        "System of a Down": "E:\\OneDrive\\Music\\System of a Down\\",
-        "Deftones": "E:\\OneDrive\\Music\\Deftones\\",
-        "Tool": "E:\\OneDrive\\Music\\Tool\\",
-        "Metallica": "E:\\OneDrive\\Music\\Metallica\\",
-        "The Cat Empire": "E:\\OneDrive\\Music\\Cat Empire, The\\",
-        "Rage Against the Machine": "E:\\OneDrive\\Music\\Rage Against The Machine",
-        "Cake": "E:\\OneDrive\\Music\\Cake\\",
-        "Marilyn Manson": "E:\\OneDrive\\Music\\Marilyn Manson\\",
-        "Chemical Brothers": "E:\\OneDrive\\Music\\Chemical Brothers, The\\",
-        "The Offspring": "E:\\OneDrive\\Music\\Offspring, The\\",
-        "Primus": "E:\\OneDrive\\Music\\Primus\\",
-        "Zappa": "E:\\OneDrive\\Music\\Zappa, Frank\\",
-        "The Residents": "E:\\OneDrive\\Music\\Residents, The\\",
-    }
+    preferred_bands = [
+        "System of a Down",
+        "Deftones",
+        "Tool",
+        "Metallica",
+        "Cat Empire, The",
+        "Rage Against The Machine",
+        "Cake",
+        "Marilyn Manson",
+        "Chemical Brothers, The",
+        "Offspring, The",
+        "Primus",
+        "Zappa, Frank",
+        "Residents, The",
+    ]
 
-    selected_band = random.choice(list(preferred_bands.keys()))
-    band_folder = preferred_bands[selected_band]
+    selected_band = random.choice(preferred_bands)
+    band_folder = os.path.join(preferred_base, selected_band)
+
+    if not os.path.isdir(band_folder):
+        print(f"Preferred band folder not found: {band_folder}")
+        return None
 
     return get_random_subfolder(band_folder)
 
@@ -128,8 +132,7 @@ def get_server_prefix() -> str:
 def get_relative_path(full_path: str, root_path: str) -> str:
     """Get the relative path from root to the full path."""
     try:
-        rel_path = os.path.relpath(full_path, root_path)
-        return rel_path.replace("\\", "/")
+        return os.path.relpath(full_path, root_path)
     except ValueError:
         # If paths are on different drives, just use the basename
         return os.path.basename(full_path)
@@ -158,14 +161,11 @@ def convert_to_server_paths(
         if matching_root:
             # Use the specific prefix for this root
             rel_path = get_relative_path(path, matching_root)
-            server_path = os.path.join(roots[matching_root], rel_path).replace(
-                "\\", "/"
-            )
+            # Use forward slashes for server paths (URL-style)
+            server_path = os.path.join(roots[matching_root], rel_path).replace(os.sep, "/")
         else:
             # Fallback to just using the basename with the default prefix
-            server_path = os.path.join(server_prefix, os.path.basename(path)).replace(
-                "\\", "/"
-            )
+            server_path = os.path.join(server_prefix, os.path.basename(path)).replace(os.sep, "/")
 
         server_paths.append(server_path)
 
@@ -289,6 +289,10 @@ def parse_arguments() -> argparse.Namespace:
         default=10,
         help="Number of albums to include (default: 10)",
     )
+    parser.add_argument(
+        "--preferred-base",
+        help="Base folder containing preferred bands (optional)",
+    )
     return parser.parse_args()
 
 
@@ -354,8 +358,13 @@ def generate_playlist() -> None:
     if pending_base:
         playlist_paths.extend(get_albums(pending_base, 1))
 
-    # add preferred album
-    playlist_paths.append(get_preferred_album())
+    # add preferred album if preferred base is provided
+    if args.preferred_base:
+        preferred_base = validate_folder(args.preferred_base)
+        if preferred_base:
+            preferred_album = get_preferred_album(preferred_base)
+            if preferred_album:
+                playlist_paths.append(preferred_album)
 
     # Try to add a preferred band album
     playlist_tracks = get_album_tracks(playlist_paths)
