@@ -1,0 +1,16 @@
+# ID3 Manager dependencies
+
+# ID3 tag handling (cross-format support)
+mutagen>=1.47.0
+
+# Audio processing
+pydub>=0.25.1
+
+# HTTP requests (Discogs API)
+requests>=2.32.0
+
+# Environment configuration
+python-dotenv>=1.0.1
+
+# Optional: ACRCloud library (falls back to HTTP API if not available)
+# acrcloud>=1.1.8

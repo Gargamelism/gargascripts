@@ -27,7 +27,8 @@ echo "" >> "$LOG_FILE"
   --log-file="$LOG_FILE" \
   --resilient \
   --recover \
-  --check-access
+  --check-access \
+  --metadata \
 
 SYNC_EXIT_CODE=$?
 
