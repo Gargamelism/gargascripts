@@ -4,7 +4,7 @@
 mutagen>=1.47.0
 
 # Audio processing
-pydub>=0.25.1
+pedalboard>=0.9.19
 
 # HTTP requests (Discogs API)
 requests>=2.32.0
@@ -14,3 +14,7 @@ python-dotenv>=1.0.1
 
 # Optional: ACRCloud library (falls back to HTTP API if not available)
 # acrcloud>=1.1.8
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0

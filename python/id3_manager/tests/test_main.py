@@ -1,0 +1,486 @@
+"""Tests for main.py processor logic."""
+
+import sys
+from pathlib import Path
+from argparse import Namespace
+from unittest.mock import Mock, MagicMock, patch
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from main import ID3Processor, build_parser
+from models import AudioFile, TrackMetadata, TagStatus, DiscogsRelease, DiscogsTrack
+
+
+@pytest.fixture
+def mock_config():
+    """Create mock configuration."""
+    return {
+        "acrcloud_host": "test.host",
+        "acrcloud_access_key": "test_key",
+        "acrcloud_access_secret": "test_secret",
+        "discogs_user_token": "test_token",
+    }
+
+
+@pytest.fixture
+def mock_args():
+    """Create mock arguments."""
+    return Namespace(
+        path="/test/path",
+        recursive=False,
+        include_root=False,
+        dry_run=False,
+        yes=False,
+        force=False,
+        skip_acr=False,
+        skip_discogs=False,
+        no_rename=False,
+        no_file_rename=False,
+        env_file=".env",
+        no_color=True,
+        quiet=True,
+    )
+
+
+@pytest.fixture
+def mock_prompts():
+    """Create mock InteractivePrompts."""
+    prompts = Mock()
+    prompts.print = Mock()
+    prompts.show_progress = Mock()
+    prompts.show_folder_status = Mock()
+    prompts.show_file_comparison = Mock()
+    prompts.show_acr_result = Mock()
+    prompts.show_summary = Mock()
+    prompts.confirm_tag_changes = Mock(return_value="apply")
+    prompts.confirm_folder_rename = Mock(return_value=True)
+    prompts.confirm_file_renames = Mock(return_value=True)
+    prompts.handle_no_acr_match = Mock(return_value="skip")
+    prompts.handle_no_discogs_match = Mock(return_value="skip")
+    prompts.handle_track_not_in_release = Mock(return_value="skip")
+    prompts.prompt_missing_fields = Mock(side_effect=lambda m, f: m)
+    prompts.get_manual_metadata = Mock(return_value=None)
+    prompts.get_discogs_url_or_id = Mock(return_value=None)
+    prompts.show_discogs_candidates = Mock(return_value=0)
+    return prompts
+
+
+class TestBuildParser:
+    """Tests for CLI argument parser."""
+
+    def test_has_required_path_argument(self):
+        """Should require path argument."""
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args([])
+
+    def test_accepts_path_argument(self):
+        """Should accept path argument."""
+        parser = build_parser()
+        args = parser.parse_args(["/test/path"])
+        assert args.path == "/test/path"
+
+    def test_default_values(self):
+        """Should have correct default values."""
+        parser = build_parser()
+        args = parser.parse_args(["/test/path"])
+
+        assert args.recursive is False
+        assert args.include_root is False
+        assert args.dry_run is False
+        assert args.yes is False
+        assert args.force is False
+        assert args.skip_acr is False
+        assert args.skip_discogs is False
+        assert args.no_rename is False
+        assert args.no_file_rename is False
+        assert args.env_file == ".env"
+        assert args.no_color is False
+        assert args.quiet is False
+
+    def test_recursive_flag(self):
+        """Should parse recursive flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--recursive"])
+        assert args.recursive is True
+
+        args = parser.parse_args(["/path", "-r"])
+        assert args.recursive is True
+
+    def test_dry_run_flag(self):
+        """Should parse dry-run flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_yes_flag(self):
+        """Should parse yes flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--yes"])
+        assert args.yes is True
+
+        args = parser.parse_args(["/path", "-y"])
+        assert args.yes is True
+
+    def test_force_flag(self):
+        """Should parse force flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--force"])
+        assert args.force is True
+
+    def test_skip_acr_flag(self):
+        """Should parse skip-acr flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--skip-acr"])
+        assert args.skip_acr is True
+
+    def test_skip_discogs_flag(self):
+        """Should parse skip-discogs flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--skip-discogs"])
+        assert args.skip_discogs is True
+
+    def test_no_rename_flag(self):
+        """Should parse no-rename flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--no-rename"])
+        assert args.no_rename is True
+
+    def test_no_file_rename_flag(self):
+        """Should parse no-file-rename flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--no-file-rename"])
+        assert args.no_file_rename is True
+
+    def test_env_file_option(self):
+        """Should parse custom env file path."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--env-file", "/custom/.env"])
+        assert args.env_file == "/custom/.env"
+
+    def test_quiet_flag(self):
+        """Should parse quiet flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--quiet"])
+        assert args.quiet is True
+
+        args = parser.parse_args(["/path", "-q"])
+        assert args.quiet is True
+
+
+class TestID3ProcessorInitialization:
+    """Tests for ID3Processor initialization."""
+
+    def test_creates_id3_handler(self, mock_config, mock_args, mock_prompts):
+        """Should create ID3Handler."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.id3_handler is not None
+
+    def test_creates_folder_manager(self, mock_config, mock_args, mock_prompts):
+        """Should create FolderManager."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.folder_manager is not None
+
+    def test_creates_acr_client_when_configured(self, mock_config, mock_args, mock_prompts):
+        """Should create ACRCloudClient when credentials present."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.acr_client is not None
+
+    def test_no_acr_client_when_skip_acr(self, mock_config, mock_args, mock_prompts):
+        """Should not create ACRCloudClient when --skip-acr."""
+        mock_args.skip_acr = True
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.acr_client is None
+
+    def test_no_acr_client_when_no_host(self, mock_args, mock_prompts):
+        """Should not create ACRCloudClient when host not configured."""
+        config = {"discogs_user_token": "token"}
+        processor = ID3Processor(config, mock_args, mock_prompts)
+        assert processor.acr_client is None
+
+    def test_creates_discogs_client_when_configured(self, mock_config, mock_args, mock_prompts):
+        """Should create DiscogsClient when token present."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.discogs_client is not None
+
+    def test_no_discogs_client_when_skip_discogs(self, mock_config, mock_args, mock_prompts):
+        """Should not create DiscogsClient when --skip-discogs."""
+        mock_args.skip_discogs = True
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.discogs_client is None
+
+    def test_initializes_stats(self, mock_config, mock_args, mock_prompts):
+        """Should initialize processing stats."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        assert processor.stats is not None
+        assert processor.stats.total_files == 0
+
+
+class TestMatchTrackFromCachedRelease:
+    """Tests for _match_track_from_cached_release method."""
+
+    def test_matches_track_by_acr_title(self, mock_config, mock_args, mock_prompts):
+        """Should match track using ACRCloud title."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        # Setup mock release and track
+        release = DiscogsRelease(
+            release_id=123,
+            title="Test Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        # Mock discogs_client.match_track_to_release
+        processor.discogs_client = Mock()
+        processor.discogs_client.match_track_to_release = Mock(
+            return_value=release.tracklist[0]
+        )
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+        )
+
+        acr_result = Mock(title="Test Song", artists=["Test Artist"])
+
+        result = processor._match_track_from_cached_release(af, release, acr_result)
+
+        assert result is True
+        assert af.proposed_tags is not None
+        assert af.proposed_tags.title == "Test Song"
+
+    def test_returns_false_when_no_match(self, mock_config, mock_args, mock_prompts):
+        """Should return False when track doesn't match."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        release = DiscogsRelease(
+            release_id=123,
+            title="Test Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[],
+            total_discs=1,
+        )
+
+        processor.discogs_client = Mock()
+        processor.discogs_client.match_track_to_release = Mock(return_value=None)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+        )
+
+        acr_result = Mock(title="Unknown Song", artists=[])
+
+        result = processor._match_track_from_cached_release(af, release, acr_result)
+
+        assert result is False
+        assert af.proposed_tags is None
+
+
+class TestProcessSingleFileObj:
+    """Tests for _process_single_file_obj method."""
+
+    def test_skips_complete_files_without_force(self, mock_config, mock_args, mock_prompts):
+        """Should skip files with complete tags when not forcing."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+
+        result = processor._process_single_file_obj(af, None)
+
+        # Should return None (no release selected) and not modify file
+        assert result is None
+        assert af.proposed_tags is None
+
+    def test_processes_complete_files_with_force(self, mock_config, mock_args, mock_prompts):
+        """Should process files with complete tags when forcing."""
+        mock_args.force = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.acr_client = Mock()
+        processor.acr_client.recognize_with_retry = Mock(return_value=None)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+
+        # Should attempt processing (ACR lookup incremented)
+        processor._process_single_file_obj(af, None)
+        assert processor.stats.acr_lookups == 1
+
+
+class TestApplyTagChanges:
+    """Tests for _apply_tag_changes method."""
+
+    def test_dry_run_does_not_write_tags(self, mock_config, mock_args, mock_prompts):
+        """Should not write tags in dry-run mode."""
+        mock_args.dry_run = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.write_tags = Mock(return_value=True)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+            proposed_tags=TrackMetadata(title="New Title"),
+        )
+
+        processor._apply_tag_changes([af])
+
+        # Should not call write_tags
+        processor.id3_handler.write_tags.assert_not_called()
+
+    def test_writes_tags_when_not_dry_run(self, mock_config, mock_args, mock_prompts):
+        """Should write tags when not in dry-run mode."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.write_tags = Mock(return_value=True)
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=False)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+            proposed_tags=TrackMetadata(title="New Title"),
+        )
+
+        processor._apply_tag_changes([af])
+
+        processor.id3_handler.write_tags.assert_called_once()
+        assert processor.stats.tags_updated == 1
+
+    def test_records_error_on_write_failure(self, mock_config, mock_args, mock_prompts):
+        """Should record error when tag writing fails."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.write_tags = Mock(return_value=False)
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=False)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+            proposed_tags=TrackMetadata(title="New Title"),
+        )
+
+        processor._apply_tag_changes([af])
+
+        assert len(processor.stats.errors) == 1
+        assert "Failed to write tags" in processor.stats.errors[0]
+
+
+class TestHandleFileRenames:
+    """Tests for _handle_file_renames method."""
+
+    def test_skips_when_disabled(self, mock_config, mock_args, mock_prompts):
+        """Should not rename files when no_file_rename is True."""
+        mock_args.no_file_rename = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=True)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+
+        # This method is called from _apply_tag_changes, so we test indirectly
+        mock_args.dry_run = True
+        processor._apply_tag_changes([af])
+
+        # should_rename_file should not be called because no_file_rename is True
+        processor.folder_manager.should_rename_file.assert_not_called()
+
+    def test_skips_files_that_dont_need_rename(self, mock_config, mock_args, mock_prompts):
+        """Should skip files that already have correct names."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.write_tags = Mock(return_value=True)
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=False)
+
+        af = AudioFile(
+            file_path="/test/Artist - Album - 01 - Song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+            proposed_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+
+        processor._apply_tag_changes([af])
+
+        # confirm_file_renames should not be called if no files need renaming
+        mock_prompts.confirm_file_renames.assert_not_called()
+
+
+class TestDiscoverAudioFiles:
+    """Tests for _discover_audio_files method."""
+
+    def test_sorts_by_track_number(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should sort files by disc number then track number."""
+        # Create temp audio files
+        (tmp_path / "track3.mp3").touch()
+        (tmp_path / "track1.mp3").touch()
+        (tmp_path / "track2.mp3").touch()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+
+        # Return different track numbers for each file
+        def mock_read_tags(path):
+            name = Path(path).stem
+            num = int(name[-1])  # Get number from filename
+            return TrackMetadata(track_number=num)
+
+        processor.id3_handler.read_tags = mock_read_tags
+
+        with patch.object(processor.id3_handler, 'is_supported', return_value=True):
+            with patch('main.ID3Handler.is_supported', return_value=True):
+                with patch('main.ID3Handler.get_format', return_value="mp3"):
+                    files = processor._discover_audio_files(str(tmp_path))
+
+        # Should be sorted by track number
+        assert len(files) == 3
+        track_nums = [f.current_tags.track_number for f in files]
+        assert track_nums == [1, 2, 3]

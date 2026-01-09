@@ -3,13 +3,13 @@
 import base64
 import hashlib
 import hmac
-import json
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
+import numpy as np
 import requests
-from pydub import AudioSegment
+from pedalboard.io import AudioFile
 
 from config import eprint
 from models import ACRCloudResult
@@ -32,6 +32,47 @@ class ACRCloudClient:
         self.access_secret = access_secret
         self.timeout = 15
 
+    def _extract_audio_segment(self, audio_path: str, start_sec: float,
+                               duration_sec: float) -> Tuple[np.ndarray, int]:
+        """
+        Extract a segment from an audio file.
+
+        Args:
+            audio_path: Path to audio file
+            start_sec: Start position in seconds
+            duration_sec: Duration to extract in seconds
+
+        Returns:
+            (audio_data, sample_rate) tuple
+        """
+        with AudioFile(audio_path) as f:
+            sample_rate = f.samplerate
+            start_frame = int(start_sec * sample_rate)
+            num_frames = int(duration_sec * sample_rate)
+
+            # Seek to start position
+            f.seek(start_frame)
+
+            # Read the segment
+            audio_data = f.read(num_frames)
+
+        return audio_data, sample_rate
+
+    def _export_to_mp3(self, audio_data: np.ndarray, sample_rate: int,
+                       output_path: str) -> None:
+        """
+        Export audio data to MP3 file.
+
+        Args:
+            audio_data: NumPy array of audio samples
+            sample_rate: Sample rate in Hz
+            output_path: Output file path
+        """
+        num_channels = audio_data.shape[0] if audio_data.ndim > 1 else 1
+        with AudioFile(output_path, "w", samplerate=sample_rate,
+                       num_channels=num_channels, quality=128) as f:
+            f.write(audio_data)
+
     def recognize(self, audio_path: str,
                   duration_seconds: int = 15) -> Optional[ACRCloudResult]:
         """
@@ -47,28 +88,28 @@ class ACRCloudClient:
             ACRCloudResult if match found, None otherwise
         """
         try:
-            audio = AudioSegment.from_file(audio_path)
+            with AudioFile(audio_path) as f:
+                duration_sec = f.duration
         except Exception as e:
             eprint(f"Error loading audio file {audio_path}: {e}")
             return None
 
-        audio_len_ms = len(audio)
-
-        # Use middle section for better recognition
-        middle_start = max(0, (audio_len_ms // 2) - (duration_seconds * 500))
-        end_pos = min(audio_len_ms, middle_start + (duration_seconds * 1000))
+        # Calculate middle segment position
+        middle_start_sec = max(0, (duration_sec / 2) - (duration_seconds / 2))
 
         # Ensure we have at least 5 seconds
-        if end_pos - middle_start < 5000:
-            middle_start = 0
-            end_pos = min(audio_len_ms, duration_seconds * 1000)
+        if duration_sec < 5:
+            middle_start_sec = 0
 
-        snippet = audio[middle_start:end_pos]
+        # Extract segment
+        audio_data, sr = self._extract_audio_segment(
+            audio_path, middle_start_sec, duration_seconds
+        )
 
         # Create temporary file for API
         snippet_path = Path(audio_path).with_suffix(".acr_snippet.mp3")
         try:
-            snippet.export(str(snippet_path), format="mp3")
+            self._export_to_mp3(audio_data, sr, str(snippet_path))
             result = self._call_api(str(snippet_path))
             return self._parse_response(result)
         except Exception as e:
@@ -213,29 +254,31 @@ class ACRCloudClient:
             ACRCloudResult if match found, None otherwise
         """
         try:
-            audio = AudioSegment.from_file(audio_path)
+            with AudioFile(audio_path) as f:
+                duration_sec = f.duration
         except Exception:
             return None
 
-        audio_len_ms = len(audio)
-        duration_ms = 15000  # 15 seconds
+        duration_extract = 15  # seconds
 
         # Try different positions based on attempt
-        positions = [
-            0,  # Start
-            audio_len_ms // 4,  # 25%
-            audio_len_ms * 3 // 4,  # 75%
+        positions_sec = [
+            0,                      # Start
+            duration_sec / 4,       # 25%
+            duration_sec * 3 / 4,   # 75%
         ]
 
-        if attempt < len(positions):
-            start_pos = positions[attempt]
-            end_pos = min(audio_len_ms, start_pos + duration_ms)
+        if attempt < len(positions_sec):
+            start_sec = positions_sec[attempt]
 
-            snippet = audio[start_pos:end_pos]
+            audio_data, sr = self._extract_audio_segment(
+                audio_path, start_sec, duration_extract
+            )
+
             snippet_path = Path(audio_path).with_suffix(f".acr_alt_{attempt}.mp3")
 
             try:
-                snippet.export(str(snippet_path), format="mp3")
+                self._export_to_mp3(audio_data, sr, str(snippet_path))
                 result = self._call_api(str(snippet_path))
                 return self._parse_response(result)
             except Exception:
