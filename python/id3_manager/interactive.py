@@ -558,10 +558,7 @@ class InteractivePrompts:
     def show_folder_status(self, folder_path: str, file_count: int,
                            needs_processing: int) -> None:
         """Show folder processing status."""
-        from pathlib import Path
-        folder_name = Path(folder_path).name
-
-        print(f"\n{self._c('bold', 'Processing folder:')} {folder_name}")
+        print(f"\n{self._c('bold', 'Processing folder:')} {folder_path}")
         print(f"  Files found: {file_count}")
         print(f"  Need processing: {needs_processing}")
 
