@@ -368,7 +368,10 @@ class FolderManager:
 
     def generate_filename(self, metadata, extension: str) -> Optional[str]:
         """
-        Generate filename: {ARTIST} - {ALBUM} - {TRACK_NUMBER} - {TITLE}.{ext}
+        Generate filename based on metadata.
+
+        Single disc: {ARTIST} - {ALBUM} - {TRACK_NUMBER} - {TITLE}.{ext}
+        Multi-disc:  {ARTIST} - {ALBUM} CD{N} - {TRACK_NUMBER} - {TITLE}.{ext}
 
         Args:
             metadata: TrackMetadata with file info
@@ -386,7 +389,13 @@ class FolderManager:
         title = self._sanitize_filename(metadata.title)
         track_num = f"{metadata.track_number:02d}"
 
-        return f"{artist} - {album} - {track_num} - {title}{extension}"
+        # Include CD number for multi-disc albums
+        if metadata.disc_number and (metadata.total_discs and metadata.total_discs > 1):
+            album_part = f"{album} CD{metadata.disc_number}"
+        else:
+            album_part = album
+
+        return f"{artist} - {album_part} - {track_num} - {title}{extension}"
 
     def should_rename_file(self, current_path: str, metadata) -> bool:
         """

@@ -564,3 +564,33 @@ class InteractivePrompts:
         print(f"\n{self._c('bold', 'Processing folder:')} {folder_name}")
         print(f"  Files found: {file_count}")
         print(f"  Need processing: {needs_processing}")
+
+    def handle_track_not_in_release(self, filename: str, release_title: str) -> str:
+        """
+        Handle case when a track doesn't match the cached release.
+
+        Args:
+            filename: Name of the file being processed
+            release_title: Title of the cached release
+
+        Returns:
+            'search', 'skip', or 'quit'
+        """
+        print(f"\n{self._c('yellow', f'Track not found in release:')} {filename}")
+        print(f"  Release: {release_title}")
+        print()
+        print("  [1] Search Discogs for this file")
+        print("  [2] Skip this file")
+        print("  [q] Quit")
+
+        while True:
+            choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip().lower()
+
+            if choice == "1":
+                return "search"
+            elif choice == "2":
+                return "skip"
+            elif choice == "q":
+                return "quit"
+
+            print(self._c("red", "Invalid selection."))

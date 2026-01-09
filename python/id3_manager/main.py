@@ -160,10 +160,13 @@ class ID3Processor:
 
     def _process_files(self, audio_files: List[AudioFile]) -> None:
         """Process a list of audio files."""
+        from models import DiscogsRelease
+        folder_release: Optional[DiscogsRelease] = None  # Cached release for folder
+
         for i, af in enumerate(audio_files):
             self.prompts.show_progress(i + 1, len(audio_files),
                                        Path(af.file_path).name)
-            self._process_single_file_obj(af)
+            folder_release = self._process_single_file_obj(af, folder_release)
             self.stats.files_processed += 1
 
         # Confirm and apply changes
@@ -206,13 +209,23 @@ class ID3Processor:
             elif result == "quit":
                 sys.exit(0)
 
-    def _process_single_file_obj(self, af: AudioFile) -> None:
-        """Process a single AudioFile object."""
+    def _process_single_file_obj(self, af: AudioFile,
+                                  folder_release=None):
+        """
+        Process a single AudioFile object.
+
+        Args:
+            af: Audio file to process
+            folder_release: Cached DiscogsRelease from previous file in folder
+
+        Returns:
+            The selected DiscogsRelease for caching, or the existing folder_release
+        """
         self.stats.total_files += 1
 
         # Skip if already complete and not forcing
         if af.tag_status == TagStatus.COMPLETE and not self.args.force:
-            return
+            return folder_release
 
         # Try ACRCloud recognition
         acr_result = None
@@ -233,7 +246,7 @@ class ID3Processor:
                 manual_tags = self.prompts.get_manual_metadata(af.current_tags)
                 if manual_tags:
                     af.proposed_tags = manual_tags
-                return
+                return folder_release
             elif action == "existing":
                 # Use existing tags for Discogs search
                 if af.current_tags.artist:
@@ -245,19 +258,40 @@ class ID3Processor:
                     })()
                 else:
                     self.stats.files_skipped += 1
-                    return
+                    return folder_release
             elif action == "skip":
                 self.stats.files_skipped += 1
-                return
+                return folder_release
             elif action == "quit":
                 sys.exit(0)
 
         if not acr_result:
-            return
+            return folder_release
 
         # Search Discogs
         if self.discogs_client:
-            self._search_and_match_discogs(af, acr_result)
+            # Try cached release first
+            if folder_release:
+                if self._match_track_from_cached_release(af, folder_release, acr_result):
+                    return folder_release  # Matched - keep using this release
+                else:
+                    # No match in cached release - offer options
+                    action = self.prompts.handle_track_not_in_release(
+                        Path(af.file_path).name, folder_release.title
+                    )
+                    if action == "search":
+                        # Do fresh Discogs search
+                        selected_release = self._search_and_match_discogs(af, acr_result)
+                        return selected_release or folder_release
+                    elif action == "skip":
+                        self.stats.files_skipped += 1
+                        return folder_release
+                    elif action == "quit":
+                        sys.exit(0)
+            else:
+                # First file - do full search
+                selected_release = self._search_and_match_discogs(af, acr_result)
+                return selected_release
         else:
             # ACRCloud only - create basic tags
             af.proposed_tags = TrackMetadata(
@@ -266,11 +300,74 @@ class ID3Processor:
                 album=acr_result.album,
             )
 
-    def _search_and_match_discogs(self, af: AudioFile, acr_result) -> None:
-        """Search Discogs and match track."""
+        return folder_release
+
+    def _match_track_from_cached_release(self, af: AudioFile,
+                                          release,
+                                          acr_result) -> bool:
+        """
+        Try to match file to a track in the cached release.
+
+        Args:
+            af: Audio file to process
+            release: Cached DiscogsRelease to match against
+            acr_result: ACRCloud result for the file
+
+        Returns:
+            True if match found and proposed_tags set
+        """
+        # Try matching with ACRCloud title first
+        track = self.discogs_client.match_track_to_release(release, acr_result.title)
+
+        # If no match, try with existing file title tag
+        if (not track or not track.track_number) and af.current_tags.title:
+            track = self.discogs_client.match_track_to_release(
+                release, af.current_tags.title
+            )
+
+        if track and track.track_number:
+            af.discogs_release = release
+            af.discogs_track = track
+
+            # Build proposed tags
+            proposed = TrackMetadata(
+                title=track.title,
+                artist=release.artists[0] if release.artists else None,
+                album=release.title,
+                album_artist=release.artists[0] if release.artists else None,
+                track_number=track.track_number,
+                total_tracks=len(release.tracklist),
+                disc_number=track.disc_number,
+                total_discs=release.total_discs if release.total_discs > 1 else None,
+                year=release.year,
+                genre=release.genres[0] if release.genres else None,
+            )
+
+            # Check for missing required fields and prompt user
+            proposed = self.prompts.prompt_missing_fields(
+                proposed, Path(af.file_path).name
+            )
+
+            if proposed:
+                af.proposed_tags = proposed
+                return True
+
+        return False
+
+    def _search_and_match_discogs(self, af: AudioFile, acr_result):
+        """
+        Search Discogs and match track.
+
+        Args:
+            af: Audio file to process
+            acr_result: ACRCloud result for the file
+
+        Returns:
+            Selected DiscogsRelease for caching, or None
+        """
         artist = acr_result.artists[0] if acr_result.artists else None
         if not artist:
-            return
+            return None
 
         releases = self.discogs_client.find_best_release(
             artist=artist,
@@ -288,7 +385,7 @@ class ID3Processor:
                     artist=artist,
                     album=acr_result.album,
                 )
-                return
+                return None
             elif action == "retry":
                 new_artist, new_track = self.prompts.get_modified_search_query(
                     artist, acr_result.title
@@ -310,23 +407,23 @@ class ID3Processor:
                     else:
                         self.prompts.print("  Could not fetch release.")
                         self.stats.files_skipped += 1
-                        return
+                        return None
                 else:
                     self.stats.files_skipped += 1
-                    return
+                    return None
             elif action == "manual":
                 manual_tags = self.prompts.get_manual_metadata()
                 if manual_tags:
                     af.proposed_tags = manual_tags
-                return
+                return None
             elif action == "skip":
                 self.stats.files_skipped += 1
-                return
+                return None
             elif action == "quit":
                 sys.exit(0)
 
         if not releases:
-            return
+            return None
 
         # Filter releases to only those where we can match the track
         matchable_releases = []
@@ -345,7 +442,7 @@ class ID3Processor:
                     artist=artist,
                     album=acr_result.album,
                 )
-                return
+                return None
             elif action == "manual_url":
                 release_id = self.prompts.get_discogs_url_or_id()
                 if release_id:
@@ -358,22 +455,22 @@ class ID3Processor:
                     else:
                         self.prompts.print("  Could not fetch release.")
                         self.stats.files_skipped += 1
-                        return
+                        return None
                 else:
                     self.stats.files_skipped += 1
-                    return
+                    return None
             elif action == "manual":
                 manual_tags = self.prompts.get_manual_metadata()
                 if manual_tags:
                     af.proposed_tags = manual_tags
-                return
+                return None
             elif action == "skip":
                 self.stats.files_skipped += 1
-                return
+                return None
             elif action == "quit":
                 sys.exit(0)
             else:
-                return
+                return None
 
         # Extract just releases for display
         display_releases = [r for r, _ in matchable_releases]
@@ -383,7 +480,7 @@ class ID3Processor:
 
         if selected is None:
             self.stats.files_skipped += 1
-            return
+            return None
 
         # Handle manual URL entry
         if selected == "manual_url":
@@ -399,10 +496,10 @@ class ID3Processor:
                 else:
                     self.prompts.print("  Could not fetch release.")
                     self.stats.files_skipped += 1
-                    return
+                    return None
             else:
                 self.stats.files_skipped += 1
-                return
+                return None
         else:
             # Use pre-matched release and track
             release, track = matchable_releases[selected]
@@ -431,9 +528,10 @@ class ID3Processor:
         if proposed is None:
             # User chose to skip
             self.stats.files_skipped += 1
-            return
+            return None
 
         af.proposed_tags = proposed
+        return release  # Return selected release for caching
 
     def _apply_tag_changes(self, audio_files: List[AudioFile]) -> None:
         """Apply proposed tag changes to files."""
