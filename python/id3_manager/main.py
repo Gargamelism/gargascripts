@@ -125,13 +125,16 @@ class ID3Processor:
                     self._process_disc(disc_folder, disc_files)
         else:
             # Single folder processing
-            needs_processing = [af for af in audio_files if af.needs_processing]
+            needs_tag_update = [af for af in audio_files if af.needs_processing]
+            needs_rename = [af for af in audio_files if af.needs_rename] if not self.args.no_file_rename else []
             self.prompts.show_folder_status(
-                folder_path, len(audio_files), len(needs_processing)
+                folder_path, len(audio_files), len(needs_tag_update), len(needs_rename)
             )
 
-            if needs_processing or self.args.force:
-                files_to_process = audio_files if self.args.force else needs_processing
+            # Process files needing either tag updates or renaming
+            files_needing_work = {af for af in audio_files if af.needs_processing or af.needs_rename}
+            if files_needing_work or self.args.force:
+                files_to_process = audio_files if self.args.force else list(files_needing_work)
                 self._process_files(files_to_process)
 
         # Handle folder renaming
@@ -141,17 +144,21 @@ class ID3Processor:
     def _process_disc(self, disc_folder: AlbumFolder,
                       audio_files: List[AudioFile]) -> None:
         """Process a single disc of a multi-disc album."""
-        needs_processing = [af for af in audio_files if af.needs_processing]
+        needs_tag_update = [af for af in audio_files if af.needs_processing]
+        needs_rename = [af for af in audio_files if af.needs_rename] if not self.args.no_file_rename else []
 
         self.prompts.print(f"\n  Disc {disc_folder.detected_disc_number}: "
-                          f"{len(audio_files)} files, {len(needs_processing)} need processing")
+                          f"{len(audio_files)} files, {len(needs_tag_update)} need tags, "
+                          f"{len(needs_rename)} need rename")
 
-        if needs_processing or self.args.force:
-            files_to_process = audio_files if self.args.force else needs_processing
+        # Process files needing either tag updates or renaming
+        files_needing_work = {af for af in audio_files if af.needs_processing or af.needs_rename}
+        if files_needing_work or self.args.force:
+            files_to_process = audio_files if self.args.force else list(files_needing_work)
 
-            # Set disc number for all files in this folder
+            # Set disc number for files needing tag updates
             for af in files_to_process:
-                if af.current_tags.disc_number is None:
+                if af.needs_processing and af.current_tags.disc_number is None:
                     if af.proposed_tags is None:
                         af.proposed_tags = TrackMetadata()
                     af.proposed_tags.disc_number = disc_folder.detected_disc_number
@@ -223,8 +230,9 @@ class ID3Processor:
         """
         self.stats.total_files += 1
 
-        # Skip if already complete and not forcing
-        if af.tag_status == TagStatus.COMPLETE and not self.args.force:
+        # Skip tag lookups if file only needs renaming (tags already complete)
+        if not af.needs_processing and not self.args.force:
+            # File has complete tags, just needs rename - skip ACRCloud/Discogs
             return folder_release
 
         # Try ACRCloud recognition

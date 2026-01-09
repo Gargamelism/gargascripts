@@ -556,11 +556,12 @@ class InteractivePrompts:
                 print(f"  ... and {len(stats.errors) - 10} more errors")
 
     def show_folder_status(self, folder_path: str, file_count: int,
-                           needs_processing: int) -> None:
+                           needs_tag_update: int, needs_rename: int) -> None:
         """Show folder processing status."""
         print(f"\n{self._c('bold', 'Processing folder:')} {folder_path}")
         print(f"  Files found: {file_count}")
-        print(f"  Need processing: {needs_processing}")
+        print(f"  Need tag update: {needs_tag_update}")
+        print(f"  Need rename: {needs_rename}")
 
     def handle_track_not_in_release(self, filename: str, release_title: str) -> str:
         """

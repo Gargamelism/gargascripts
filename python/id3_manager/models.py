@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List
 
+from utils import file_needs_rename
+
 
 class TagStatus(Enum):
     """Status of ID3 tags for an audio file."""
@@ -119,6 +121,11 @@ class AudioFile:
     def needs_processing(self) -> bool:
         """Check if file needs tag processing."""
         return self.tag_status != TagStatus.COMPLETE
+
+    @property
+    def needs_rename(self) -> bool:
+        """Check if file needs renaming based on current tags."""
+        return file_needs_rename(self.file_path, self.current_tags)
 
 
 @dataclass
