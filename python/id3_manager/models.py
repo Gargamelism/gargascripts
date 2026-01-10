@@ -43,6 +43,19 @@ class TrackMetadata:
             return TagStatus.PARTIAL
         return TagStatus.MISSING
 
+    def get_missing_required_fields(self) -> List[str]:
+        """Return list of missing required field names."""
+        missing = []
+        if not self.title:
+            missing.append('title')
+        if not self.artist:
+            missing.append('artist')
+        if not self.track_number:
+            missing.append('track_number')
+        if not self.album:
+            missing.append('album')
+        return missing
+
     def merge_with(self, other: "TrackMetadata") -> "TrackMetadata":
         """Create new metadata by filling missing fields from other."""
         return TrackMetadata(
@@ -111,6 +124,14 @@ class AudioFile:
     acr_result: Optional[ACRCloudResult] = None
     discogs_release: Optional[DiscogsRelease] = None
     discogs_track: Optional[DiscogsTrack] = None
+
+    def __hash__(self):
+        return hash(self.file_path)
+
+    def __eq__(self, other):
+        if not isinstance(other, AudioFile):
+            return False
+        return self.file_path == other.file_path
 
     @property
     def tag_status(self) -> TagStatus:

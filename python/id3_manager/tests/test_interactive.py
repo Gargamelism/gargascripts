@@ -194,11 +194,11 @@ class TestPromptMissingFields:
         result = prompts.prompt_missing_fields(metadata, "test.mp3")
         assert result == metadata
 
-    def test_auto_yes_returns_metadata_unchanged(self, prompts_auto_yes):
-        """Should return incomplete metadata in auto_yes mode (can't auto-fill)."""
+    def test_auto_yes_skips_incomplete_metadata(self, prompts_auto_yes):
+        """Should return None in auto_yes mode when required fields are missing."""
         metadata = TrackMetadata(title="Song")  # Missing artist, album, track_number
         result = prompts_auto_yes.prompt_missing_fields(metadata, "test.mp3")
-        assert result == metadata
+        assert result is None  # Cannot proceed without required fields in auto mode
 
 
 class TestShowProgress:

@@ -360,7 +360,7 @@ class InteractivePrompts:
         total_discs = prompt_int("Total discs", defaults.total_discs if defaults else None)
         genre = prompt_field("Genre", defaults.genre if defaults else None)
 
-        return TrackMetadata(
+        metadata = TrackMetadata(
             title=title,
             artist=artist,
             album=album,
@@ -372,94 +372,79 @@ class InteractivePrompts:
             genre=genre,
         )
 
+        # Validate required fields - loop until complete or user skips
+        return self.prompt_missing_fields(metadata, "manual entry")
+
     def prompt_missing_fields(self, metadata: TrackMetadata,
                               filename: str) -> Optional[TrackMetadata]:
         """
         Prompt user to fill in missing required fields.
+
+        Loops until all required fields are filled or user explicitly skips.
 
         Args:
             metadata: TrackMetadata with some fields possibly missing
             filename: Name of the file being processed (for display)
 
         Returns:
-            Updated TrackMetadata with filled fields, or None if user skips
+            TrackMetadata with all required fields filled, or None if user skips
         """
-        # Check which required fields are missing
-        missing = []
-        if not metadata.track_number:
-            missing.append("track_number")
-        if not metadata.title:
-            missing.append("title")
-        if not metadata.artist:
-            missing.append("artist")
-        if not metadata.album:
-            missing.append("album")
-
-        if not missing:
-            return metadata  # Nothing missing
-
-        if self.auto_yes:
-            # Can't auto-fill missing data
-            return metadata
-
-        print(f"\n{self._c('yellow', f'Missing required fields for:')} {filename}")
-        print(f"  Missing: {', '.join(missing)}")
-        print()
-        print("  [1] Enter missing values")
-        print("  [2] Continue with incomplete data")
-        print("  [3] Skip this file")
-
         while True:
-            choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip()
+            missing = metadata.get_missing_required_fields()
 
-            if choice == "1":
-                break
-            elif choice == "2":
-                return metadata
-            elif choice == "3":
+            if not missing:
+                return metadata  # All required fields present
+
+            if self.auto_yes:
+                # In auto-yes mode, cannot proceed without required fields
+                print(f"\n{self._c('yellow', f'Missing required fields for:')} {filename}")
+                print(f"  Missing: {', '.join(missing)}")
+                print(f"  {self._c('red', '[AUTO] Cannot proceed - missing required fields. Skipping.')}")
                 return None
 
-            print(self._c("red", "Invalid selection."))
+            print(f"\n{self._c('yellow', f'Missing required fields for:')} {filename}")
+            print(f"  Missing: {', '.join(missing)}")
+            print()
+            print("  [1] Enter missing values")
+            print("  [2] Skip this file")
 
-        # Prompt for missing fields only
-        print(f"\n{self._c('cyan', 'Enter missing values:')}")
+            while True:
+                choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip()
 
-        title = metadata.title
-        artist = metadata.artist
-        album = metadata.album
-        track_number = metadata.track_number
+                if choice == "1":
+                    break
+                elif choice == "2":
+                    return None  # Explicit skip
 
-        if "title" in missing:
-            value = input(f"  Title: ").strip()
-            title = value if value else None
+                print(self._c("red", "Invalid selection."))
 
-        if "artist" in missing:
-            value = input(f"  Artist: ").strip()
-            artist = value if value else None
+            # Prompt for missing fields only
+            print(f"\n{self._c('cyan', 'Enter missing values:')}")
 
-        if "album" in missing:
-            value = input(f"  Album: ").strip()
-            album = value if value else None
+            if "title" in missing:
+                value = input(f"  Title: ").strip()
+                if value:
+                    metadata.title = value
 
-        if "track_number" in missing:
-            value = input(f"  Track #: ").strip()
-            try:
-                track_number = int(value) if value else None
-            except ValueError:
-                track_number = None
+            if "artist" in missing:
+                value = input(f"  Artist: ").strip()
+                if value:
+                    metadata.artist = value
 
-        return TrackMetadata(
-            title=title,
-            artist=artist,
-            album=album,
-            album_artist=metadata.album_artist,
-            track_number=track_number,
-            total_tracks=metadata.total_tracks,
-            disc_number=metadata.disc_number,
-            total_discs=metadata.total_discs,
-            year=metadata.year,
-            genre=metadata.genre,
-        )
+            if "album" in missing:
+                value = input(f"  Album: ").strip()
+                if value:
+                    metadata.album = value
+
+            if "track_number" in missing:
+                value = input(f"  Track #: ").strip()
+                if value:
+                    try:
+                        metadata.track_number = int(value)
+                    except ValueError:
+                        print(self._c("red", "  Invalid number, try again."))
+
+            # Loop continues - will check again if still missing
 
     def get_modified_search_query(self, default_artist: str,
                                   default_track: str) -> tuple:

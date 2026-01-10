@@ -254,6 +254,8 @@ class ID3Processor:
                 manual_tags = self.prompts.get_manual_metadata(af.current_tags)
                 if manual_tags:
                     af.proposed_tags = manual_tags
+                else:
+                    self.stats.files_skipped += 1
                 return folder_release
             elif action == "existing":
                 # Use existing tags for Discogs search
@@ -445,11 +447,18 @@ class ID3Processor:
             action = self.prompts.handle_no_discogs_match(acr_result)
 
             if action == "acr_only":
-                af.proposed_tags = TrackMetadata(
+                proposed = TrackMetadata(
                     title=acr_result.title,
                     artist=artist,
                     album=acr_result.album,
                 )
+                # Merge with existing tags and validate
+                proposed = proposed.merge_with(af.current_tags)
+                proposed = self.prompts.prompt_missing_fields(proposed, Path(af.file_path).name)
+                if proposed is None:
+                    self.stats.files_skipped += 1
+                    return None
+                af.proposed_tags = proposed
                 return None
             elif action == "manual_url":
                 release_id = self.prompts.get_discogs_url_or_id()
@@ -468,9 +477,11 @@ class ID3Processor:
                     self.stats.files_skipped += 1
                     return None
             elif action == "manual":
-                manual_tags = self.prompts.get_manual_metadata()
+                manual_tags = self.prompts.get_manual_metadata(af.current_tags)
                 if manual_tags:
                     af.proposed_tags = manual_tags
+                else:
+                    self.stats.files_skipped += 1
                 return None
             elif action == "skip":
                 self.stats.files_skipped += 1
