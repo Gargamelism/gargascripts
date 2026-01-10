@@ -506,7 +506,7 @@ class InteractivePrompts:
         bar = "=" * filled + "-" * (bar_width - filled)
         pct = (current / total * 100) if total > 0 else 0
 
-        print(f"\r[{bar}] {pct:5.1f}% ({current}/{total}) {message}",
+        print(f"\r[{bar}] {pct:5.1f}% ({current}/{total}) {message}\033[K",
               end="", flush=True)
 
         if current == total:
