@@ -442,7 +442,7 @@ class ID3Processor:
             if track and track.track_number:
                 matchable_releases.append((release, track))
 
-        if not matchable_releases:
+        while not matchable_releases:
             # No releases with matching tracks - treat as no match
             action = self.prompts.handle_no_discogs_match(acr_result)
 
@@ -471,11 +471,25 @@ class ID3Processor:
                         matchable_releases = [(release, track)]
                     else:
                         self.prompts.print("  Could not fetch release.")
-                        self.stats.files_skipped += 1
-                        return None
                 else:
-                    self.stats.files_skipped += 1
-                    return None
+                    continue
+            elif action == "retry":
+                new_artist, new_track = self.prompts.get_modified_search_query(
+                    artist, acr_result.title
+                )
+                releases = self.discogs_client.find_best_release(
+                    artist=new_artist, track=new_track
+                )
+                self.stats.discogs_lookups += 1
+                # Re-filter releases to only those where we can match the track
+                matchable_releases = []
+                for release in releases:
+                    track = self.discogs_client.match_track_to_release(release, acr_result.title)
+                    if track and track.track_number:
+                        matchable_releases.append((release, track))
+                # If still no matchable releases, loop will continue and show menu again
+                if not matchable_releases:
+                    self.prompts.print("  No matching releases found.")
             elif action == "manual":
                 manual_tags = self.prompts.get_manual_metadata(af.current_tags)
                 if manual_tags:

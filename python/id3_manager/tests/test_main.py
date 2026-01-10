@@ -484,3 +484,206 @@ class TestDiscoverAudioFiles:
         assert len(files) == 3
         track_nums = [f.current_tags.track_number for f in files]
         assert track_nums == [1, 2, 3]
+
+
+class TestSearchAndMatchDiscogs:
+    """Tests for _search_and_match_discogs method."""
+
+    def test_retry_with_modified_query_when_no_matchable_releases(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should retry search with modified query when releases found but none match track."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        # Create releases - first search returns releases but none match the track
+        release_no_match = DiscogsRelease(
+            release_id=123,
+            title="Some Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        # Second search (after retry) returns release that matches
+        release_with_match = DiscogsRelease(
+            release_id=456,
+            title="Correct Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        # Setup mock discogs client
+        processor.discogs_client = Mock()
+        # First call returns release with no matching track, second call returns matching release
+        processor.discogs_client.find_best_release = Mock(
+            side_effect=[[release_no_match], [release_with_match]]
+        )
+
+        # First call returns None (no match), second call returns the matching track
+        matching_track = release_with_match.tracklist[0]
+        processor.discogs_client.match_track_to_release = Mock(
+            side_effect=[None, matching_track]
+        )
+
+        # Setup prompts to return "retry" when no match found
+        mock_prompts.handle_no_discogs_match = Mock(return_value="retry")
+        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+        mock_prompts.show_discogs_candidates = Mock(return_value=0)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+        )
+
+        acr_result = Mock(
+            title="Test Song",
+            artists=["Test Artist"],
+            album="Some Album",
+        )
+
+        result = processor._search_and_match_discogs(af, acr_result)
+
+        # Should have called get_modified_search_query
+        mock_prompts.get_modified_search_query.assert_called_once_with("Test Artist", "Test Song")
+
+        # Should have searched twice (initial + retry)
+        assert processor.discogs_client.find_best_release.call_count == 2
+
+        # Should have shown candidates after successful retry
+        mock_prompts.show_discogs_candidates.assert_called_once()
+
+        # Should return the selected release
+        assert result == release_with_match
+
+    def test_retry_loops_back_to_menu_when_still_no_matchable_releases(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should show menu again if retry with modified query still finds no matchable releases."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        release = DiscogsRelease(
+            release_id=123,
+            title="Some Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        processor.discogs_client = Mock()
+        # Both searches return releases but none match the track
+        processor.discogs_client.find_best_release = Mock(return_value=[release])
+        processor.discogs_client.match_track_to_release = Mock(return_value=None)
+
+        # First call returns "retry", second call returns "skip" to exit the loop
+        mock_prompts.handle_no_discogs_match = Mock(side_effect=["retry", "skip"])
+        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+        )
+
+        acr_result = Mock(
+            title="Test Song",
+            artists=["Test Artist"],
+            album="Some Album",
+        )
+
+        result = processor._search_and_match_discogs(af, acr_result)
+
+        # Should have retried
+        mock_prompts.get_modified_search_query.assert_called_once()
+
+        # Should have printed message about no matches
+        mock_prompts.print.assert_called_with("  No matching releases found.")
+
+        # Should have shown menu twice (initial + after failed retry)
+        assert mock_prompts.handle_no_discogs_match.call_count == 2
+
+        # Should have incremented files_skipped when user chose skip
+        assert processor.stats.files_skipped == 1
+
+        # Should return None since user skipped
+        assert result is None
+
+    def test_retry_then_manual_url_after_no_matches(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should allow manual URL entry after retry finds no matchable releases."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+
+        release_no_match = DiscogsRelease(
+            release_id=123,
+            title="Some Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        # Release fetched via manual URL
+        manual_release = DiscogsRelease(
+            release_id=789,
+            title="Manual Album",
+            artists=["Test Artist"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+            ],
+            total_discs=1,
+        )
+
+        processor.discogs_client = Mock()
+        # Initial search returns release but no matching track
+        processor.discogs_client.find_best_release = Mock(return_value=[release_no_match])
+        # First call returns None (no match), after manual URL entry returns the track
+        processor.discogs_client.match_track_to_release = Mock(
+            side_effect=[None, None, manual_release.tracklist[0]]
+        )
+        processor.discogs_client.get_release = Mock(return_value=manual_release)
+
+        # First: retry (fails), Second: manual_url
+        mock_prompts.handle_no_discogs_match = Mock(side_effect=["retry", "manual_url"])
+        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+        mock_prompts.get_discogs_url_or_id = Mock(return_value=789)
+        mock_prompts.show_discogs_candidates = Mock(return_value=0)
+
+        af = AudioFile(
+            file_path="/test/song.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(),
+        )
+
+        acr_result = Mock(
+            title="Test Song",
+            artists=["Test Artist"],
+            album="Some Album",
+        )
+
+        result = processor._search_and_match_discogs(af, acr_result)
+
+        # Should have tried retry first
+        mock_prompts.get_modified_search_query.assert_called_once()
+
+        # Should have shown menu twice (initial + after failed retry)
+        assert mock_prompts.handle_no_discogs_match.call_count == 2
+
+        # Should have fetched the manual release
+        processor.discogs_client.get_release.assert_called_once_with(789)
+
+        # Should return the manually fetched release
+        assert result == manual_release
