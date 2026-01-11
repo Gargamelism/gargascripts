@@ -687,3 +687,39 @@ class TestSearchAndMatchDiscogs:
 
         # Should return the manually fetched release
         assert result == manual_release
+
+
+class TestFilesOnlyNeedingRename:
+    """Tests for files that have complete tags but need renaming."""
+
+    def test_files_with_complete_tags_needing_rename_are_renamed(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should rename files that have complete tags but wrong filenames."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=True)
+        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
+        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+
+        # File has complete tags but wrong filename
+        af = AudioFile(
+            file_path="/test/wrong_name.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+        # No proposed_tags - file doesn't need tag updates
+        assert af.proposed_tags is None
+        assert not af.needs_processing  # Tags are complete
+
+        # Patch the file_needs_rename function to return True for this file
+        with patch('models.file_needs_rename', return_value=True):
+            processor._process_files([af])
+
+        # Should have called rename
+        processor.folder_manager.rename_audio_file.assert_called_once()

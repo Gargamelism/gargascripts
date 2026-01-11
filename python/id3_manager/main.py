@@ -193,6 +193,15 @@ class ID3Processor:
             else:
                 self.stats.files_skipped += len(files_with_changes)
 
+        # Handle files that only need renaming (complete tags, no proposed changes)
+        if not self.args.no_file_rename:
+            files_only_needing_rename = [
+                af for af in audio_files
+                if not af.proposed_tags and af.needs_rename
+            ]
+            if files_only_needing_rename:
+                self._handle_file_renames(files_only_needing_rename)
+
     def _process_single_file(self, file_path: str) -> None:
         """Process a single audio file."""
         if not ID3Handler.is_supported(file_path):
