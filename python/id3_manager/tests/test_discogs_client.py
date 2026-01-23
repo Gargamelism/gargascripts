@@ -163,3 +163,167 @@ class TestMatchTrackToRelease:
         track = client.match_track_to_release(release_with_tracks, "1 - Second Song")
         assert track is not None
         assert track.title == "Second Song"
+
+
+class TestParseReleaseVinyl:
+    """Tests for _parse_release with vinyl-style positions."""
+
+    def test_two_sided_vinyl_sequential_numbering(self, client):
+        """Two-sided vinyl should have sequential track numbers across sides."""
+        data = {
+            "id": 12345,
+            "title": "Test Vinyl",
+            "artists": [{"name": "Test Artist"}],
+            "year": 2020,
+            "genres": ["Rock"],
+            "labels": [{"name": "Test Label"}],
+            "tracklist": [
+                {"type_": "track", "position": "A1", "title": "Side A Track 1"},
+                {"type_": "track", "position": "A2", "title": "Side A Track 2"},
+                {"type_": "track", "position": "A3", "title": "Side A Track 3"},
+                {"type_": "track", "position": "B1", "title": "Side B Track 1"},
+                {"type_": "track", "position": "B2", "title": "Side B Track 2"},
+                {"type_": "track", "position": "B3", "title": "Side B Track 3"},
+            ],
+        }
+
+        release = client._parse_release(data)
+
+        assert len(release.tracklist) == 6
+        assert release.total_discs == 1
+
+        # Verify sequential numbering: A1=1, A2=2, A3=3, B1=4, B2=5, B3=6
+        tracks = {t.position: t for t in release.tracklist}
+        assert tracks["A1"].track_number == 1
+        assert tracks["A2"].track_number == 2
+        assert tracks["A3"].track_number == 3
+        assert tracks["B1"].track_number == 4
+        assert tracks["B2"].track_number == 5
+        assert tracks["B3"].track_number == 6
+
+        # All tracks should be on disc 1
+        for track in release.tracklist:
+            assert track.disc_number == 1
+
+    def test_four_sided_vinyl_two_discs(self, client):
+        """Four-sided vinyl (2LP) should have sequential numbering per disc."""
+        data = {
+            "id": 12345,
+            "title": "Double LP",
+            "artists": [{"name": "Test Artist"}],
+            "year": 2020,
+            "genres": ["Rock"],
+            "labels": [],
+            "tracklist": [
+                {"type_": "track", "position": "A1", "title": "A1"},
+                {"type_": "track", "position": "A2", "title": "A2"},
+                {"type_": "track", "position": "B1", "title": "B1"},
+                {"type_": "track", "position": "B2", "title": "B2"},
+                {"type_": "track", "position": "C1", "title": "C1"},
+                {"type_": "track", "position": "C2", "title": "C2"},
+                {"type_": "track", "position": "D1", "title": "D1"},
+                {"type_": "track", "position": "D2", "title": "D2"},
+            ],
+        }
+
+        release = client._parse_release(data)
+
+        assert len(release.tracklist) == 8
+        assert release.total_discs == 2
+
+        tracks = {t.position: t for t in release.tracklist}
+
+        # Disc 1: A/B sides - sequential 1-4
+        assert tracks["A1"].track_number == 1
+        assert tracks["A1"].disc_number == 1
+        assert tracks["A2"].track_number == 2
+        assert tracks["A2"].disc_number == 1
+        assert tracks["B1"].track_number == 3
+        assert tracks["B1"].disc_number == 1
+        assert tracks["B2"].track_number == 4
+        assert tracks["B2"].disc_number == 1
+
+        # Disc 2: C/D sides - sequential 1-4 (resets for new disc)
+        assert tracks["C1"].track_number == 1
+        assert tracks["C1"].disc_number == 2
+        assert tracks["C2"].track_number == 2
+        assert tracks["C2"].disc_number == 2
+        assert tracks["D1"].track_number == 3
+        assert tracks["D1"].disc_number == 2
+        assert tracks["D2"].track_number == 4
+        assert tracks["D2"].disc_number == 2
+
+    def test_non_vinyl_release_unchanged(self, client):
+        """Non-vinyl releases should use standard position parsing."""
+        data = {
+            "id": 12345,
+            "title": "CD Album",
+            "artists": [{"name": "Test Artist"}],
+            "year": 2020,
+            "genres": [],
+            "labels": [],
+            "tracklist": [
+                {"type_": "track", "position": "1", "title": "Track 1"},
+                {"type_": "track", "position": "2", "title": "Track 2"},
+                {"type_": "track", "position": "3", "title": "Track 3"},
+            ],
+        }
+
+        release = client._parse_release(data)
+
+        assert len(release.tracklist) == 3
+        assert release.total_discs == 1
+
+        tracks = release.tracklist
+        assert tracks[0].track_number == 1
+        assert tracks[1].track_number == 2
+        assert tracks[2].track_number == 3
+
+    def test_vinyl_skips_heading_entries(self, client):
+        """Vinyl parsing should skip heading entries (side markers)."""
+        data = {
+            "id": 12345,
+            "title": "Test Vinyl",
+            "artists": [{"name": "Test Artist"}],
+            "year": 2020,
+            "genres": [],
+            "labels": [],
+            "tracklist": [
+                {"type_": "heading", "position": "", "title": "Side A"},
+                {"type_": "track", "position": "A1", "title": "Track 1"},
+                {"type_": "track", "position": "A2", "title": "Track 2"},
+                {"type_": "heading", "position": "", "title": "Side B"},
+                {"type_": "track", "position": "B1", "title": "Track 3"},
+                {"type_": "track", "position": "B2", "title": "Track 4"},
+            ],
+        }
+
+        release = client._parse_release(data)
+
+        # Should only have 4 tracks, not 6
+        assert len(release.tracklist) == 4
+
+        tracks = {t.position: t for t in release.tracklist}
+        assert tracks["A1"].track_number == 1
+        assert tracks["A2"].track_number == 2
+        assert tracks["B1"].track_number == 3
+        assert tracks["B2"].track_number == 4
+
+
+class TestIsVinylPosition:
+    """Tests for _is_vinyl_position helper method."""
+
+    def test_vinyl_positions(self, client):
+        """Should identify vinyl-style positions."""
+        assert client._is_vinyl_position("A1") is True
+        assert client._is_vinyl_position("B2") is True
+        assert client._is_vinyl_position("C10") is True
+        assert client._is_vinyl_position("a1") is True  # lowercase
+
+    def test_non_vinyl_positions(self, client):
+        """Should not identify non-vinyl positions as vinyl."""
+        assert client._is_vinyl_position("1") is False
+        assert client._is_vinyl_position("12") is False
+        assert client._is_vinyl_position("1-1") is False
+        assert client._is_vinyl_position("CD1-1") is False
+        assert client._is_vinyl_position("") is False

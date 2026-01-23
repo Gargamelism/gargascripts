@@ -224,6 +224,9 @@ class ID3Processor:
                 self._apply_tag_changes([af])
             elif result == "quit":
                 sys.exit(0)
+        elif not self.args.no_file_rename and af.needs_rename:
+            # File has complete tags but needs renaming
+            self._handle_file_renames([af])
 
     def _process_single_file_obj(self, af: AudioFile,
                                   folder_release=None):
@@ -628,9 +631,13 @@ class ID3Processor:
                 success, result = self.folder_manager.rename_audio_file(
                     file_path, new_name
                 )
-                if success and result != "File already has correct name":
-                    self.prompts.print(f"  Renamed: {Path(file_path).name} -> {new_name}")
-                elif not success:
+                if success:
+                    if result == "File already has correct name":
+                        self.prompts.print(f"  Skipped (already correct): {Path(file_path).name}")
+                    else:
+                        self.prompts.print(f"  Renamed: {Path(file_path).name} -> {new_name}")
+                else:
+                    self.prompts.print(f"  Failed: {Path(file_path).name} - {result}")
                     self.stats.errors.append(f"Failed to rename {file_path}: {result}")
 
     def _handle_folder_rename(self, folder_path: str,

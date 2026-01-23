@@ -1,0 +1,15 @@
+1. add info even if retrieved from discogs
+1. handle two/four sided vynil/tapes
+1. black config 120 chars a line
+1. move imports to top
+1. is there an acrcloud sdk we can use?
+1. is there a discogs sdk we can use?
+1. interactive prompting lib?
+1. align interactive mode to be all numbers or all letters
+1. enums!
+2. add logging
+3. change config to base settings
+4. use pydantic/typed dicts
+5. remove single/double letter variables
+6. move long if/elsif to match pattern or dict
+7. when there are multiple discs the folders should be named CD{NUM}
