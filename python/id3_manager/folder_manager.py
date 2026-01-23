@@ -70,6 +70,39 @@ class FolderManager:
                 return int(match.group(1))
         return None
 
+    def normalize_disc_folder_name(self, folder_path: str, disc_number: int,
+                                   dry_run: bool = False) -> Tuple[bool, str]:
+        """
+        Normalize disc folder name to standard CD{N} format.
+
+        Args:
+            folder_path: Path to disc folder
+            disc_number: Detected disc number
+            dry_run: If True, don't actually rename
+
+        Returns:
+            (success, new_path or message)
+        """
+        current = Path(folder_path)
+        expected_name = self.generate_disc_folder_name(disc_number)
+
+        if current.name == expected_name:
+            return True, folder_path  # Already correct
+
+        new_path = current.parent / expected_name
+
+        if new_path.exists():
+            return False, f"Target folder already exists: {new_path}"
+
+        if dry_run:
+            return True, f"Would rename '{current.name}' to '{expected_name}'"
+
+        try:
+            current.rename(new_path)
+            return True, str(new_path)
+        except OSError as e:
+            return False, str(e)
+
     def detect_multi_disc_from_metadata(self,
                                         audio_files: List[AudioFile]) -> int:
         """

@@ -395,3 +395,69 @@ class TestRenameFolder:
         )
         assert success is True
         assert "Would rename to" in msg
+
+
+class TestNormalizeDiscFolderName:
+    """Tests for normalize_disc_folder_name method."""
+
+    def test_already_correct_name_returns_same_path(self, folder_manager):
+        """Should return same path when folder already named CD{N}."""
+        success, result = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/CD1", 1
+        )
+        assert success is True
+        assert result == "/path/to/album/CD1"
+
+    def test_dry_run_disc_format(self, folder_manager):
+        """Should return would-rename message for 'Disc 1' in dry run."""
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/Disc 1", 1, dry_run=True
+        )
+        assert success is True
+        assert "Would rename" in msg
+        assert "'Disc 1'" in msg
+        assert "'CD1'" in msg
+
+    def test_dry_run_disk_format(self, folder_manager):
+        """Should return would-rename message for 'disk 1' in dry run."""
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/disk 1", 1, dry_run=True
+        )
+        assert success is True
+        assert "Would rename" in msg
+        assert "'disk 1'" in msg
+        assert "'CD1'" in msg
+
+    def test_dry_run_d_format(self, folder_manager):
+        """Should return would-rename message for 'd1' in dry run."""
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/d1", 1, dry_run=True
+        )
+        assert success is True
+        assert "Would rename" in msg
+        assert "'d1'" in msg
+        assert "'CD1'" in msg
+
+    def test_dry_run_number_format(self, folder_manager):
+        """Should return would-rename message for '1' in dry run."""
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/1", 1, dry_run=True
+        )
+        assert success is True
+        assert "Would rename" in msg
+        assert "'1'" in msg
+        assert "'CD1'" in msg
+
+    def test_normalizes_various_disc_numbers(self, folder_manager):
+        """Should handle different disc numbers correctly in dry run."""
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/Disc 2", 2, dry_run=True
+        )
+        assert success is True
+        assert "'CD2'" in msg
+
+        success, msg = folder_manager.normalize_disc_folder_name(
+            "/path/to/album/disk 3", 3, dry_run=True
+        )
+        assert success is True
+        assert "'CD3'" in msg

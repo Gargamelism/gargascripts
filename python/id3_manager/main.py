@@ -82,6 +82,37 @@ class ID3Processor:
 
         self.prompts.show_summary(self.stats)
 
+    def _filter_folders_from_start(
+        self,
+        folders: List[str],
+        start_at: Optional[Path]
+    ) -> List[str]:
+        """Filter folder list to start from a specific folder.
+
+        Args:
+            folders: Sorted list of folder paths to process
+            start_at: Folder path to start from, or None to include all
+
+        Returns:
+            List of folders from start_at onwards (or all if start_at is None)
+        """
+        if start_at is None:
+            return folders
+
+        start_at_resolved = start_at.resolve()
+
+        for i, folder in enumerate(folders):
+            folder_resolved = Path(folder).resolve()
+            if folder_resolved == start_at_resolved:
+                skipped = i
+                if skipped > 0:
+                    self.prompts.print(f"Skipping {skipped} folder(s) before: {start_at.name}")
+                return folders[i:]
+
+        # start_at folder not found in list
+        self.prompts.print(f"Warning: Start folder not found in scan: {start_at}")
+        return []
+
     def _process_recursive(self, base_path: str) -> None:
         """Process all subfolders recursively."""
         base = Path(base_path)
@@ -100,7 +131,12 @@ class ID3Processor:
                                   if str(Path(f).resolve()) != base_str}
 
         folders_to_process = sorted(folders_to_process)
-        self.prompts.print(f"\nFound {len(folders_to_process)} folder(s) with audio files\n")
+
+        # Filter to start from specified folder if --start-at is provided
+        start_at = Path(self.args.start_at) if self.args.start_at else None
+        folders_to_process = self._filter_folders_from_start(folders_to_process, start_at)
+
+        self.prompts.print(f"\nFound {len(folders_to_process)} folder(s) to process\n")
 
         for folder in folders_to_process:
             self._process_folder(folder)
@@ -118,6 +154,24 @@ class ID3Processor:
         disc_folders = self.folder_manager.detect_multi_disc_structure(folder_path)
 
         if len(disc_folders) > 1:
+            # Normalize disc folder names to CD{N} format
+            for i, disc_folder in enumerate(disc_folders):
+                if disc_folder.detected_disc_number is not None:
+                    success, result = self.folder_manager.normalize_disc_folder_name(
+                        disc_folder.folder_path,
+                        disc_folder.detected_disc_number,
+                        dry_run=self.args.dry_run
+                    )
+                    if success and result != disc_folder.folder_path:
+                        if not self.args.dry_run:
+                            # Update the folder path in the AlbumFolder object
+                            disc_folders[i] = AlbumFolder(
+                                folder_path=result,
+                                detected_disc_number=disc_folder.detected_disc_number,
+                                parent_folder=disc_folder.parent_folder
+                            )
+                        self.prompts.print(f"  Renamed disc folder: {result}")
+
             # Process each disc folder separately
             for disc_folder in disc_folders:
                 disc_files = self._discover_audio_files(disc_folder.folder_path)
@@ -767,6 +821,11 @@ Examples:
     )
 
     parser.add_argument(
+        "--start-at",
+        help="When using --recursive, start processing from this folder path (skips earlier folders)"
+    )
+
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview changes without applying them"
@@ -841,6 +900,15 @@ def main():
     # Validate path
     if not os.path.exists(args.path):
         parser.error(f"Path does not exist: {args.path}")
+
+    # Validate --start-at usage
+    if args.start_at:
+        if not args.recursive:
+            eprint("Warning: --start-at has no effect without --recursive")
+        elif not os.path.exists(args.start_at):
+            parser.error(f"Start folder does not exist: {args.start_at}")
+        elif not os.path.isdir(args.start_at):
+            parser.error(f"Start path is not a folder: {args.start_at}")
 
     # Load configuration
     config = load_config(args.env_file)

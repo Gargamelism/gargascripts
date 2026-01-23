@@ -1,5 +1,3 @@
-1. add info even if retrieved from discogs
-1. handle two/four sided vynil/tapes
 1. black config 120 chars a line
 1. move imports to top
 1. is there an acrcloud sdk we can use?

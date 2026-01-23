@@ -31,6 +31,7 @@ def mock_args():
         path="/test/path",
         recursive=False,
         include_root=False,
+        start_at=None,
         dry_run=False,
         yes=False,
         force=False,
@@ -687,6 +688,133 @@ class TestSearchAndMatchDiscogs:
 
         # Should return the manually fetched release
         assert result == manual_release
+
+
+class TestFilterFoldersFromStart:
+    """Tests for _filter_folders_from_start method."""
+
+    def test_returns_all_folders_when_start_at_is_none(self, mock_config, mock_args, mock_prompts):
+        """Should return all folders when start_at is None."""
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = ["/path/a", "/path/b", "/path/c"]
+
+        result = processor._filter_folders_from_start(folders, None)
+
+        assert result == folders
+
+    def test_returns_folders_from_start_point(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should skip folders before start_at and return the rest."""
+        # Create real folders so Path.resolve() works
+        folder_a = tmp_path / "2020 - Album A"
+        folder_b = tmp_path / "2021 - Album B"
+        folder_c = tmp_path / "2022 - Album C"
+        folder_a.mkdir()
+        folder_b.mkdir()
+        folder_c.mkdir()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = [str(folder_a), str(folder_b), str(folder_c)]
+        start_at = folder_b
+
+        result = processor._filter_folders_from_start(folders, start_at)
+
+        assert len(result) == 2
+        assert result[0] == str(folder_b)
+        assert result[1] == str(folder_c)
+
+    def test_returns_empty_list_when_start_at_not_found(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should return empty list when start_at folder is not in the list."""
+        folder_a = tmp_path / "a"
+        folder_b = tmp_path / "b"
+        folder_nonexistent = tmp_path / "nonexistent"
+        folder_a.mkdir()
+        folder_b.mkdir()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = [str(folder_a), str(folder_b)]
+        start_at = folder_nonexistent
+
+        result = processor._filter_folders_from_start(folders, start_at)
+
+        assert result == []
+        mock_prompts.print.assert_called_once()
+        assert "not found" in mock_prompts.print.call_args[0][0].lower()
+
+    def test_returns_all_when_start_at_is_first_folder(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should return all folders when start_at is the first folder."""
+        folder_a = tmp_path / "a"
+        folder_b = tmp_path / "b"
+        folder_c = tmp_path / "c"
+        folder_a.mkdir()
+        folder_b.mkdir()
+        folder_c.mkdir()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = [str(folder_a), str(folder_b), str(folder_c)]
+        start_at = folder_a
+
+        result = processor._filter_folders_from_start(folders, start_at)
+
+        assert result == folders
+        # Should not print "skipping" message when starting at first folder
+        mock_prompts.print.assert_not_called()
+
+    def test_returns_only_last_when_start_at_is_last_folder(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should return only last folder when start_at is the last one."""
+        folder_a = tmp_path / "a"
+        folder_b = tmp_path / "b"
+        folder_c = tmp_path / "c"
+        folder_a.mkdir()
+        folder_b.mkdir()
+        folder_c.mkdir()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = [str(folder_a), str(folder_b), str(folder_c)]
+        start_at = folder_c
+
+        result = processor._filter_folders_from_start(folders, start_at)
+
+        assert result == [str(folder_c)]
+        mock_prompts.print.assert_called_once()
+        assert "2 folder" in mock_prompts.print.call_args[0][0].lower()
+
+    def test_prints_skip_count_when_skipping(self, mock_config, mock_args, mock_prompts, tmp_path):
+        """Should print how many folders are being skipped."""
+        folder_a = tmp_path / "a"
+        folder_b = tmp_path / "b"
+        folder_c = tmp_path / "c"
+        folder_d = tmp_path / "d"
+        folder_a.mkdir()
+        folder_b.mkdir()
+        folder_c.mkdir()
+        folder_d.mkdir()
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        folders = [str(folder_a), str(folder_b), str(folder_c), str(folder_d)]
+        start_at = folder_c
+
+        processor._filter_folders_from_start(folders, start_at)
+
+        mock_prompts.print.assert_called_once()
+        call_arg = mock_prompts.print.call_args[0][0]
+        assert "2 folder" in call_arg.lower()
+        assert "skipping" in call_arg.lower()
+
+
+class TestBuildParserStartAt:
+    """Tests for --start-at CLI argument."""
+
+    def test_start_at_option(self):
+        """Should parse --start-at option."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--start-at", "/path/to/folder"])
+        assert args.start_at == "/path/to/folder"
+
+    def test_start_at_default_is_none(self):
+        """Should default --start-at to None."""
+        parser = build_parser()
+        args = parser.parse_args(["/path"])
+        assert args.start_at is None
 
 
 class TestFilesOnlyNeedingRename:
