@@ -23,12 +23,18 @@ echo "" >> "$LOG_FILE"
 # Run bisync
 /opt/homebrew/bin/rclone bisync "$LOCAL_PATH" "$REMOTE_PATH" \
   --filter-from="$EXCLUDE_FILE" \
-  --verbose \
   --log-file="$LOG_FILE" \
   --resilient \
   --recover \
   --check-access \
   --metadata \
+  --update \
+  --ignore-errors \
+  --retries 3 \
+  --retries-sleep 10s \
+  --tpslimit 4 \
+  --transfers 1 \
+  -vv
 
 SYNC_EXIT_CODE=$?
 
