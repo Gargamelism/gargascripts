@@ -33,7 +33,7 @@ echo "" >> "$LOG_FILE"
   --retries 3 \
   --retries-sleep 10s \
   --tpslimit 4 \
-  --transfers 1 \
+  --transfers 4 \
   -vv
 
 SYNC_EXIT_CODE=$?
