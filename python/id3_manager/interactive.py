@@ -1,6 +1,7 @@
 """Interactive user prompts and confirmations."""
 
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 from models import (
@@ -49,7 +50,6 @@ class InteractivePrompts:
 
     def show_file_comparison(self, audio_file: AudioFile) -> None:
         """Display current vs proposed tags for a file."""
-        from pathlib import Path
         filename = Path(audio_file.file_path).name
 
         print(f"\n{self._c('bold', 'File:')} {filename}")
@@ -205,12 +205,17 @@ class InteractivePrompts:
             return "apply"
 
         files_with_changes = [af for af in audio_files if af.proposed_tags]
-        print(f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}")
 
         while True:
-            choice = input(f"{self._c('bold', 'Apply changes? [y/N/r(eview)/q(uit)]: ')} ").strip().lower()
+            print(f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}")
+            choice = input(f"{self._c('bold', 'Apply changes? [y/N/r(eview)/e(dit)/q(uit)]: ')} ").strip().lower()
 
             if choice == "r":
+                for af in files_with_changes:
+                    self.show_file_comparison(af)
+                continue
+            elif choice == "e":
+                self._handle_edit_track(files_with_changes)
                 for af in files_with_changes:
                     self.show_file_comparison(af)
                 continue
@@ -221,7 +226,112 @@ class InteractivePrompts:
             elif choice == "q":
                 return "quit"
 
-            print(self._c("red", "Invalid choice. Enter y, n, r, or q."))
+            print(self._c("red", "Invalid choice. Enter y, n, r, e, or q."))
+
+    def _handle_edit_track(self, audio_files: List[AudioFile]) -> None:
+        """Allow user to select and edit a track's proposed tags."""
+        # Filter to only files with proposed tags
+        editable_files = [af for af in audio_files if af.proposed_tags]
+
+        if not editable_files:
+            print(self._c("yellow", "No files with proposed tags to edit."))
+            return
+
+        # Display numbered list of tracks
+        print(f"\n{self._c('cyan', 'Select track to edit:')}")
+        for i, af in enumerate(editable_files, 1):
+            filename = Path(af.file_path).name
+            title = af.proposed_tags.title if af.proposed_tags else "(no proposed tags)"
+            print(f"  [{i}] {filename}")
+            print(f"      Proposed title: {title}")
+
+        print(f"  [c] Cancel")
+
+        # Get track selection
+        while True:
+            choice = input(f"\n{self._c('bold', f'Select track [1-{len(editable_files)}/c]: ')} ").strip().lower()
+
+            if choice == "c":
+                return
+
+            try:
+                idx = int(choice)
+                if 1 <= idx <= len(editable_files):
+                    selected_file = editable_files[idx - 1]
+                    self._edit_track_fields(selected_file)
+                    return
+            except ValueError:
+                pass
+
+            print(self._c("red", "Invalid selection. Try again."))
+
+    def _edit_track_fields(self, audio_file: AudioFile) -> None:
+        """Edit specific fields of a track's proposed tags."""
+        if not audio_file.proposed_tags:
+            print(self._c("yellow", "This file has no proposed tags to edit."))
+            return
+
+        proposed = audio_file.proposed_tags
+        filename = Path(audio_file.file_path).name
+
+        # Field mapping: key -> (display_name, attribute_name, is_int)
+        fields = {
+            't': ('Title', 'title', False),
+            'a': ('Artist', 'artist', False),
+            'b': ('Album', 'album', False),
+            'l': ('Album Artist', 'album_artist', False),
+            'n': ('Track Number', 'track_number', True),
+            'N': ('Total Tracks', 'total_tracks', True),
+            'd': ('Disc Number', 'disc_number', True),
+            'D': ('Total Discs', 'total_discs', True),
+            'y': ('Year', 'year', True),
+            'g': ('Genre', 'genre', False),
+        }
+
+        while True:
+            # Show current proposed values
+            print(f"\n{self._c('bold', 'Editing:')} {filename}")
+            print(f"\n{self._c('cyan', 'Current proposed values:')}")
+            for key, (display_name, attr_name, _) in fields.items():
+                value = getattr(proposed, attr_name)
+                value_str = str(value) if value is not None else self._c("dim", "(empty)")
+                print(f"  [{key}] {display_name}: {value_str}")
+
+            print(f"  [x] Done editing this track")
+
+            choice = input(f"\n{self._c('bold', 'Select field to edit: ')} ").strip()
+
+            if choice == "x":
+                return
+
+            if choice not in fields:
+                print(self._c("red", "Invalid selection. Try again."))
+                continue
+
+            display_name, attr_name, is_int = fields[choice]
+            current_value = getattr(proposed, attr_name)
+
+            # Prompt for new value
+            default_str = f" [{current_value}]" if current_value is not None else ""
+            new_value = input(f"  {display_name}{default_str}: ").strip()
+
+            if not new_value and current_value is not None:
+                # Keep current value
+                continue
+
+            if not new_value:
+                # Set to None
+                setattr(proposed, attr_name, None)
+            elif is_int:
+                try:
+                    setattr(proposed, attr_name, int(new_value))
+                except ValueError:
+                    print(self._c("red", "Invalid number. Value not changed."))
+                    continue
+            else:
+                setattr(proposed, attr_name, new_value)
+
+            print(self._c("green", f"  {display_name} updated."))
 
     def confirm_folder_rename(self, current_name: str, new_name: str) -> bool:
         """
@@ -254,7 +364,6 @@ class InteractivePrompts:
         Returns:
             'manual', 'existing', 'skip', or 'quit'
         """
-        from pathlib import Path
         filename = Path(file_path).name
 
         print(f"\n{self._c('yellow', f'No ACRCloud match for:')} {filename}")
@@ -488,7 +597,6 @@ class InteractivePrompts:
 
         print(f"\n{self._c('cyan', f'File renames ({len(renames)} files):')}")
         for current_path, new_name in renames:
-            from pathlib import Path
             current_name = Path(current_path).name
             self.show_file_rename(current_name, new_name)
 
@@ -528,7 +636,6 @@ class InteractivePrompts:
         if stats.malformed_files:
             print(f"\n{self._c('yellow', f'Malformed files ({len(stats.malformed_files)}):')}")
             for malformed in stats.malformed_files[:10]:  # Limit displayed files
-                from pathlib import Path
                 print(f"  - {Path(malformed).name}")
             if len(stats.malformed_files) > 10:
                 print(f"  ... and {len(stats.malformed_files) - 10} more")
