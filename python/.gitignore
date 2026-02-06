@@ -2,3 +2,5 @@ cookies.txt
 *secret*
 token.json
 *.mp4
+output/*
+.claude/*

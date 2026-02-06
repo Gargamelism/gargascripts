@@ -12,6 +12,7 @@ import logging
 import re
 import signal
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,8 @@ class SyncConfig:
     dry_run: bool = False
     verbose: bool = False
     resync: bool = False
+    max_retries: int = 3
+    retry_delay: int = 30
     rclone_path: str = "/opt/homebrew/bin/rclone"
 
 
@@ -112,6 +115,29 @@ class RcloneSyncManager:
         file_part = file_path.lstrip("/")
         return f"{remote_base}/{file_part}"
 
+    def _get_lock_file_path(self) -> Path:
+        """Get the bisync lock file path for this sync pair."""
+        # Rclone stores lock files in ~/Library/Caches/rclone/bisync/ (macOS)
+        # Format: {sanitized_path1}..{sanitized_path2}_.lck
+        cache_dir = Path.home() / "Library/Caches/rclone/bisync"
+
+        # Sanitize paths the same way rclone does (replace / with _)
+        local_sanitized = str(self.config.local_path).replace("/", "_").lstrip("_")
+        remote_sanitized = self.config.remote_path.rstrip(":").replace(":", "_")
+
+        lock_name = f"{local_sanitized}..{remote_sanitized}_.lck"
+        return cache_dir / lock_name
+
+    def _cleanup_lock_file(self) -> None:
+        """Delete the bisync lock file if it exists."""
+        lock_path = self._get_lock_file_path()
+        if lock_path.exists():
+            self.logger.debug(f"Cleaning up lock file: {lock_path}")
+            try:
+                lock_path.unlink()
+            except Exception as e:
+                self.logger.warning(f"Failed to delete lock file: {e}")
+
     def _setup_logging(self) -> logging.Logger:
         """Configure logging with file and console handlers."""
 
@@ -155,15 +181,20 @@ class RcloneSyncManager:
             "--recover",
             "--check-access",
             "--metadata",
-            "--update",
             "--retries", "3",
             "--retries-sleep", "10s",
             "--tpslimit", "4",
             "--transfers", "4",
             "--conflict-resolve", "newer",
             "--conflict-loser", "num",
-            "-vv",
+            "--max-lock", "30m",
         ]
+
+        # Add verbosity based on config
+        if self.config.verbose:
+            cmd.append("-vv")
+        else:
+            cmd.append("-v")
 
         if self.config.resync:
             cmd.append("--resync")
@@ -180,15 +211,14 @@ class RcloneSyncManager:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=3600,  # 1 hour timeout
             )
             exit_code = process.returncode
-        except subprocess.TimeoutExpired:
-            self.logger.error("Sync timed out after 1 hour")
-            return SyncResult(exit_code=1, errors=["Sync timed out after 1 hour"])
         except Exception as e:
             self.logger.error(f"Failed to run rclone: {e}")
             return SyncResult(exit_code=1, errors=[str(e)])
+        finally:
+            # Always clean up lock file after sync attempt
+            self._cleanup_lock_file()
 
         self.logger.info(f"Rclone exited with code: {exit_code}")
 
@@ -217,6 +247,96 @@ class RcloneSyncManager:
         self.logger.info(f"Errors: {len(result.errors)}")
 
         return result
+
+    def run_sync_with_retry(self) -> SyncResult:
+        """Run bisync with automatic retry on transient failures."""
+        attempt = 0
+
+        while True:
+            attempt += 1
+            if self.config.max_retries > 0:
+                self.logger.info(f"Sync attempt {attempt}/{self.config.max_retries}")
+            else:
+                self.logger.info(f"Sync attempt {attempt} (unlimited retries)")
+
+            result = self.run_bisync()
+
+            # Success - done
+            if result.exit_code == 0:
+                return result
+
+            # Handle critical error (exit code 7) - try to recover
+            if result.exit_code == self.EXIT_CRITICAL and not self.config.resync:
+                # Check if it's just metadata errors (transfers completed successfully)
+                if self._check_transfers_completed():
+                    self.logger.info(
+                        "Transfers completed successfully, only metadata errors occurred"
+                    )
+                    self.logger.info("Running --resync to recover bisync state...")
+                    self.config.resync = True
+                    resync_result = self.run_bisync()
+                    self.config.resync = False
+                    return resync_result
+
+                # Check for failed file transfers
+                failed_files = self._parse_failed_files()
+                if failed_files:
+                    self.logger.info(
+                        f"Found {len(failed_files)} files that failed with transient errors"
+                    )
+                    self.logger.info("Retrying failed files individually...")
+                    retry_results = self._retry_failed_transfers(failed_files)
+
+                    # Check if all retries succeeded
+                    failures = [r for r in retry_results if r.action == "error"]
+                    if not failures:
+                        self.logger.info(
+                            "All file retries succeeded, running --resync to recover state..."
+                        )
+                        self.config.resync = True
+                        resync_result = self.run_bisync()
+                        self.config.resync = False  # Reset for future calls
+                        return resync_result
+                    else:
+                        self.logger.error(
+                            f"{len(failures)} file retries failed, manual intervention needed"
+                        )
+                        return result
+
+            # Check if retryable
+            is_retryable = self._is_retryable_error(result)
+
+            if not is_retryable:
+                self.logger.error("Non-retryable error, stopping")
+                return result
+
+            # Check max retries (0 = unlimited)
+            if self.config.max_retries > 0 and attempt >= self.config.max_retries:
+                self.logger.error(f"Max retries ({self.config.max_retries}) reached, stopping")
+                return result
+
+            # Check for interrupt
+            if self._interrupted:
+                self.logger.warning("Interrupted, stopping retries")
+                return result
+
+            # Wait and retry
+            self.logger.info(f"Retrying in {self.config.retry_delay} seconds...")
+            time.sleep(self.config.retry_delay)
+
+    def _is_retryable_error(self, result: SyncResult) -> bool:
+        """Check if the error is transient and worth retrying."""
+        # Exit code 1 = retryable error
+        if result.exit_code == 1:
+            return True
+
+        # Exit code 7 with "retryable without --resync" in log = network/transient error
+        if result.exit_code == 7:
+            for error in result.errors:
+                if "retryable without --resync" in error.lower():
+                    return True
+
+        return False
 
     def parse_rclone_output(self) -> list[FileIssue]:
         """Parse rclone log file for conflicts and errors."""
@@ -259,6 +379,67 @@ class RcloneSyncManager:
             self.logger.warning(f"Failed to parse log file: {e}")
 
         return issues
+
+    def _check_transfers_completed(self) -> bool:
+        """Check if all file transfers completed successfully (only metadata errors remain)."""
+        if not self.log_file or not self.log_file.exists():
+            return False
+
+        # Look for the final transfer summary line like:
+        # "Transferred:          312 / 312, 100%"
+        transfer_pattern = re.compile(r"Transferred:\s+(\d+)\s*/\s*(\d+),\s*100%")
+        has_metadata_errors = False
+        transfers_complete = False
+
+        try:
+            with open(self.log_file, "r") as f:
+                for line in f:
+                    # Check for 100% transfer completion
+                    match = transfer_pattern.search(line)
+                    if match:
+                        transferred = int(match.group(1))
+                        total = int(match.group(2))
+                        if transferred == total and total > 0:
+                            transfers_complete = True
+
+                    # Check for metadata errors (not file transfer errors)
+                    if "Failed to update directory timestamp or metadata" in line:
+                        has_metadata_errors = True
+                    if "error updating metadata" in line:
+                        has_metadata_errors = True
+
+        except Exception as e:
+            self.logger.warning(f"Failed to check transfer completion: {e}")
+            return False
+
+        return transfers_complete and has_metadata_errors
+
+    def _parse_failed_files(self) -> list[str]:
+        """Parse log file to find files that failed with transient errors (EOF, 500, etc)."""
+        failed_files: list[str] = []
+
+        if not self.log_file or not self.log_file.exists():
+            return failed_files
+
+        # Pattern matches: "ERROR : <filepath>: Couldn't move: EOF" or similar transient errors
+        error_pattern = re.compile(
+            r"ERROR\s*:\s*(.+?):\s*(?:Couldn't move|Failed to copy|error copying).*"
+            r"(?:EOF|500|502|503|504|timeout|connection|invalidRequest)",
+            re.IGNORECASE,
+        )
+
+        try:
+            with open(self.log_file, "r") as f:
+                for line in f:
+                    match = error_pattern.search(line)
+                    if match:
+                        file_path = match.group(1).strip()
+                        if file_path and file_path not in failed_files:
+                            failed_files.append(file_path)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse log for failed files: {e}")
+
+        return failed_files
 
     def resolve_remaining_conflicts(self) -> list[Resolution]:
         """Find and resolve any .conflict* files left after sync."""
@@ -419,6 +600,56 @@ class RcloneSyncManager:
             resolutions.append(resolution)
 
         return resolutions
+
+    def _retry_failed_transfers(self, files: list[str]) -> list[Resolution]:
+        """Retry files that failed during transfer with transient errors."""
+        resolutions: list[Resolution] = []
+
+        for file_path in files:
+            if self._interrupted:
+                self.logger.warning("Interrupt detected, stopping retry")
+                break
+
+            self.logger.info(f"Retrying failed file: {file_path}")
+            resolution = self._sync_single_file(file_path)
+            resolutions.append(resolution)
+            self.logger.info(f"Retry result for {file_path}: {resolution.action}")
+
+        return resolutions
+
+    def _sync_single_file(self, file_path: str) -> Resolution:
+        """Sync a single file, determining direction from mtimes."""
+        local_file = self.config.local_path / file_path
+
+        # Get remote mtime
+        remote_mtime = self._get_remote_mtime(file_path)
+
+        # Get local mtime if file exists
+        local_mtime = None
+        if local_file.exists():
+            local_mtime = local_file.stat().st_mtime_ns
+
+        # Determine sync direction
+        if local_mtime and (not remote_mtime or local_mtime > remote_mtime):
+            # Local is newer or remote doesn't exist - push to remote
+            return self._copy_to_remote(file_path)
+        elif remote_mtime and (not local_mtime or remote_mtime > local_mtime):
+            # Remote is newer or local doesn't exist - pull from remote
+            return self._copy_from_remote(file_path)
+        elif local_mtime and remote_mtime:
+            # Equal timestamps
+            return Resolution(
+                path=file_path,
+                action="skipped",
+                message="Files have equal timestamps",
+            )
+        else:
+            # Neither exists
+            return Resolution(
+                path=file_path,
+                action="skipped",
+                message="File not found on either side",
+            )
 
     def _get_remote_mtime(self, file_path: str) -> Optional[int]:
         """Get modification time of remote file using rclone lsjson."""
@@ -621,6 +852,18 @@ Examples:
         help="Force resync to recover from corrupted bisync state",
     )
     parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Maximum sync retry attempts on failure (default: 3, 0 = unlimited)",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=int,
+        default=30,
+        help="Seconds to wait between retries (default: 30)",
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Increase output verbosity",
@@ -647,6 +890,8 @@ def main() -> int:
         dry_run=args.dry_run,
         verbose=args.verbose,
         resync=args.resync,
+        max_retries=args.max_retries,
+        retry_delay=args.retry_delay,
         rclone_path=args.rclone_path,
     )
 
@@ -657,7 +902,7 @@ def main() -> int:
         return 2
 
     # Run the sync
-    result = manager.run_bisync()
+    result = manager.run_sync_with_retry()
 
     # Retry any files that had conflicts but weren't auto-resolved
     if result.conflicts_found and result.exit_code in (0, 1):
