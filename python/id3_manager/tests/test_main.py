@@ -39,6 +39,7 @@ def mock_args():
         skip_discogs=False,
         no_rename=False,
         no_file_rename=False,
+        rename_only=False,
         env_file=".env",
         no_color=True,
         quiet=True,
@@ -154,6 +155,18 @@ class TestBuildParser:
         parser = build_parser()
         args = parser.parse_args(["/path", "--no-file-rename"])
         assert args.no_file_rename is True
+
+    def test_rename_only_flag(self):
+        """Should parse rename-only flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--rename-only"])
+        assert args.rename_only is True
+
+    def test_rename_only_default_is_false(self):
+        """Should default rename-only to False."""
+        parser = build_parser()
+        args = parser.parse_args(["/path"])
+        assert args.rename_only is False
 
     def test_env_file_option(self):
         """Should parse custom env file path."""
@@ -815,6 +828,78 @@ class TestBuildParserStartAt:
         parser = build_parser()
         args = parser.parse_args(["/path"])
         assert args.start_at is None
+
+
+class TestRenameOnly:
+    """Tests for --rename-only mode."""
+
+    def test_rename_only_skips_tag_processing(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
+        """Should skip ACRCloud/Discogs and only rename files."""
+        mock_args.rename_only = True
+        mock_args.skip_acr = True
+        mock_args.skip_discogs = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager = Mock()
+        processor.folder_manager.detect_multi_disc_structure = Mock(return_value=[])
+        processor.folder_manager.should_rename_file = Mock(return_value=True)
+        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
+        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
+
+        af = AudioFile(
+            file_path="/test/wrong_name.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            ),
+        )
+
+        with patch.object(processor, '_discover_audio_files', return_value=[af]):
+            with patch('models.file_needs_rename', return_value=True):
+                processor._process_folder("/test")
+
+        # Should NOT have created ACR or Discogs clients
+        assert processor.acr_client is None
+        assert processor.discogs_client is None
+
+        # Should have called rename
+        processor.folder_manager.rename_audio_file.assert_called_once()
+
+    def test_rename_only_single_file_skips_tags(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should skip tag processing for single file in rename-only mode."""
+        mock_args.rename_only = True
+        mock_args.skip_acr = True
+        mock_args.skip_discogs = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.read_tags = Mock(return_value=TrackMetadata(
+            title="Song", artist="Artist", album="Album", track_number=1,
+        ))
+        processor.folder_manager = Mock()
+        processor.folder_manager.should_rename_file = Mock(return_value=True)
+        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
+        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+
+        with patch('main.ID3Handler.is_supported', return_value=True):
+            with patch('main.ID3Handler.get_format', return_value="mp3"):
+                with patch('models.file_needs_rename', return_value=True):
+                    processor._process_single_file("/test/wrong_name.mp3")
+
+        # Should have called rename
+        processor.folder_manager.rename_audio_file.assert_called_once()
+
+        # Should NOT have attempted any ACR/Discogs lookups
+        assert processor.stats.acr_lookups == 0
+        assert processor.stats.discogs_lookups == 0
 
 
 class TestFilesOnlyNeedingRename:

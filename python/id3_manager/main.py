@@ -150,6 +150,18 @@ class ID3Processor:
             self.prompts.print(f"No audio files found in: {folder_path}")
             return
 
+        # Rename-only mode: skip all tag processing, just rename files
+        if self.args.rename_only:
+            needs_rename = [af for af in audio_files if af.needs_rename]
+            self.prompts.show_folder_status(
+                folder_path, len(audio_files), 0, len(needs_rename)
+            )
+            if needs_rename:
+                self._handle_file_renames(needs_rename)
+            if not self.args.no_rename:
+                self._handle_folder_rename(folder_path, audio_files)
+            return
+
         # Check for multi-disc structure
         disc_folders = self.folder_manager.detect_multi_disc_structure(folder_path)
 
@@ -267,6 +279,12 @@ class ID3Processor:
             format=ID3Handler.get_format(file_path) or "unknown",
             current_tags=self.id3_handler.read_tags(file_path)
         )
+
+        # Rename-only mode: skip tag processing, just rename
+        if self.args.rename_only:
+            if af.needs_rename:
+                self._handle_file_renames([af])
+            return
 
         self._process_single_file_obj(af)
 
@@ -798,6 +816,9 @@ Examples:
 
   # Skip folder renaming
   python -m id3_manager /path/to/album --no-rename
+
+  # Only rename files based on existing ID3 tags (no lookups)
+  python -m id3_manager /path/to/album --rename-only
 """
     )
 
@@ -856,6 +877,12 @@ Examples:
         help="Skip Discogs lookup (use ACRCloud results only)"
     )
 
+    parser.add_argument(
+        "--rename-only",
+        action="store_true",
+        help="Only rename files based on existing ID3 tags (skip all lookups)"
+    )
+
     # Folder handling
     parser.add_argument(
         "--no-rename",
@@ -909,6 +936,11 @@ def main():
             parser.error(f"Start folder does not exist: {args.start_at}")
         elif not os.path.isdir(args.start_at):
             parser.error(f"Start path is not a folder: {args.start_at}")
+
+    # --rename-only implies skipping all lookups
+    if args.rename_only:
+        args.skip_acr = True
+        args.skip_discogs = True
 
     # Load configuration
     config = load_config(args.env_file)

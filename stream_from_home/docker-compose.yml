@@ -13,6 +13,7 @@ services:
       - GONIC_SCAN_INTERVAL=30
       - GONIC_HTTP_READ_TIMEOUT=300
       - GONIC_HTTP_WRITE_TIMEOUT=300
+      - GONIC_TRANSCODE_PATH=/usr/bin/ffmpeg
     ports:
       - 4747:80
     volumes:

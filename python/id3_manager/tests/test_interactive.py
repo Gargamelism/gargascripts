@@ -323,6 +323,170 @@ class TestConfirmFileRenames:
         assert result is True
 
 
+class TestPromptChoice:
+    """Tests for _prompt_choice helper method."""
+
+    def test_accepts_y(self, prompts):
+        """Should return mapped value for 'y' input."""
+        with patch('builtins.input', return_value="y"):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is True
+
+    def test_accepts_yes(self, prompts):
+        """Should return mapped value for 'yes' input."""
+        with patch('builtins.input', return_value="yes"):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is True
+
+    def test_case_insensitive(self, prompts):
+        """Should handle uppercase input."""
+        with patch('builtins.input', return_value="Y"):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is True
+
+    def test_accepts_n(self, prompts):
+        """Should return mapped value for 'n' input."""
+        with patch('builtins.input', return_value="n"):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is False
+
+    def test_accepts_no(self, prompts):
+        """Should return mapped value for 'no' input."""
+        with patch('builtins.input', return_value="no"):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is False
+
+    def test_empty_input_returns_default(self, prompts):
+        """Should return default value for empty input when default is set."""
+        with patch('builtins.input', return_value=""):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is False
+
+    def test_empty_input_loops_when_no_default(self, prompts):
+        """Should re-prompt when empty input and no default."""
+        with patch('builtins.input', side_effect=["", "1"]):
+            result = prompts._prompt_choice(
+                "Select option:",
+                {"1": "manual", "2": "skip"},
+            )
+            assert result == "manual"
+
+    def test_invalid_input_loops_then_accepts(self, prompts, capsys):
+        """Should show error and re-prompt on invalid input."""
+        with patch('builtins.input', side_effect=["maybe", "y"]):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "yes": True, "n": False, "no": False},
+                default=False,
+            )
+            assert result is True
+            captured = capsys.readouterr()
+            assert "Invalid choice" in captured.out
+
+    def test_numbered_choices(self, prompts):
+        """Should work with numbered menu options."""
+        with patch('builtins.input', return_value="2"):
+            result = prompts._prompt_choice(
+                "Select option:",
+                {"1": "manual", "2": "existing", "3": "skip", "q": "quit"},
+            )
+            assert result == "existing"
+
+    def test_strips_whitespace(self, prompts):
+        """Should strip whitespace from input."""
+        with patch('builtins.input', return_value="  y  "):
+            result = prompts._prompt_choice(
+                "Confirm? [y/N]:",
+                {"y": True, "n": False},
+                default=False,
+            )
+            assert result is True
+
+
+class TestConfirmFileRenamesInput:
+    """Tests for confirm_file_renames with various inputs."""
+
+    def test_accepts_yes(self, prompts):
+        """Should accept 'yes' as confirmation."""
+        renames = [("/path/old.mp3", "new.mp3")]
+        with patch('builtins.input', return_value="yes"):
+            result = prompts.confirm_file_renames(renames)
+            assert result is True
+
+    def test_accepts_y(self, prompts):
+        """Should accept 'y' as confirmation."""
+        renames = [("/path/old.mp3", "new.mp3")]
+        with patch('builtins.input', return_value="y"):
+            result = prompts.confirm_file_renames(renames)
+            assert result is True
+
+    def test_rejects_n(self, prompts):
+        """Should reject with 'n'."""
+        renames = [("/path/old.mp3", "new.mp3")]
+        with patch('builtins.input', return_value="n"):
+            result = prompts.confirm_file_renames(renames)
+            assert result is False
+
+    def test_default_is_no(self, prompts):
+        """Should default to no on empty input."""
+        renames = [("/path/old.mp3", "new.mp3")]
+        with patch('builtins.input', return_value=""):
+            result = prompts.confirm_file_renames(renames)
+            assert result is False
+
+
+class TestConfirmFolderRenameInput:
+    """Tests for confirm_folder_rename with various inputs."""
+
+    def test_accepts_yes(self, prompts):
+        """Should accept 'yes' as confirmation."""
+        with patch('builtins.input', return_value="yes"):
+            result = prompts.confirm_folder_rename("Old", "New")
+            assert result is True
+
+    def test_accepts_y(self, prompts):
+        """Should accept 'y' as confirmation."""
+        with patch('builtins.input', return_value="y"):
+            result = prompts.confirm_folder_rename("Old", "New")
+            assert result is True
+
+    def test_rejects_no(self, prompts):
+        """Should reject with 'no'."""
+        with patch('builtins.input', return_value="no"):
+            result = prompts.confirm_folder_rename("Old", "New")
+            assert result is False
+
+    def test_default_is_no(self, prompts):
+        """Should default to no on empty input."""
+        with patch('builtins.input', return_value=""):
+            result = prompts.confirm_folder_rename("Old", "New")
+            assert result is False
+
+
 class TestGetModifiedSearchQuery:
     """Tests for get_modified_search_query method."""
 

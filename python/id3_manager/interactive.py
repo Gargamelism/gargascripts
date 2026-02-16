@@ -43,6 +43,24 @@ class InteractivePrompts:
         """Apply color to text."""
         return f"{self.COLORS.get(color, '')}{text}{self.COLORS['reset']}"
 
+    def _prompt_choice(self, prompt: str, valid_choices: dict, default=None):
+        """Prompt user with input validation loop.
+
+        Args:
+            prompt: Prompt text (e.g. "Apply file renames? [y/N]:")
+            valid_choices: Map of accepted inputs to return values.
+                           Multiple keys can map to same value.
+            default: Value returned for empty input (Enter). None = empty is invalid.
+        """
+        while True:
+            choice = input(f"\n{self._c('bold', prompt)} ").strip().lower()
+            if choice == "" and default is not None:
+                return default
+            if choice in valid_choices:
+                return valid_choices[choice]
+            valid_keys = sorted(set(valid_choices.keys()))
+            print(self._c("red", f"Invalid choice. Enter {', '.join(valid_keys)}"))
+
     def print(self, *args, **kwargs):
         """Print unless quiet mode."""
         if not self.quiet:
@@ -208,25 +226,26 @@ class InteractivePrompts:
 
         while True:
             print(f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}")
-            choice = input(f"{self._c('bold', 'Apply changes? [y/N/r(eview)/e(dit)/q(uit)]: ')} ").strip().lower()
+            choice = self._prompt_choice(
+                "Apply changes? [y/N/r(eview)/e(dit)/q(uit)]:",
+                {
+                    "y": "apply", "yes": "apply",
+                    "n": "skip", "no": "skip",
+                    "r": "review", "e": "edit", "q": "quit",
+                },
+                default="skip",
+            )
 
-            if choice == "r":
+            if choice == "review":
                 for af in files_with_changes:
                     self.show_file_comparison(af)
                 continue
-            elif choice == "e":
+            elif choice == "edit":
                 self._handle_edit_track(files_with_changes)
                 for af in files_with_changes:
                     self.show_file_comparison(af)
                 continue
-            elif choice == "y":
-                return "apply"
-            elif choice == "n" or choice == "":
-                return "skip"
-            elif choice == "q":
-                return "quit"
-
-            print(self._c("red", "Invalid choice. Enter y, n, r, e, or q."))
+            return choice
 
     def _handle_edit_track(self, audio_files: List[AudioFile]) -> None:
         """Allow user to select and edit a track's proposed tags."""
@@ -351,8 +370,11 @@ class InteractivePrompts:
         print(f"  Current: {current_name}")
         print(f"  New:     {self._c('green', new_name)}")
 
-        choice = input(f"{self._c('bold', 'Rename folder? [y/N]: ')} ").strip().lower()
-        return choice == "y"
+        return self._prompt_choice(
+            "Rename folder? [y/N]:",
+            {"y": True, "yes": True, "n": False, "no": False},
+            default=False,
+        )
 
     def handle_no_acr_match(self, file_path: str) -> str:
         """
@@ -373,19 +395,10 @@ class InteractivePrompts:
         print("  [3] Skip this file")
         print("  [q] Quit")
 
-        while True:
-            choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip().lower()
-
-            if choice == "1":
-                return "manual"
-            elif choice == "2":
-                return "existing"
-            elif choice == "3":
-                return "skip"
-            elif choice == "q":
-                return "quit"
-
-            print(self._c("red", "Invalid selection."))
+        return self._prompt_choice(
+            "Select option:",
+            {"1": "manual", "2": "existing", "3": "skip", "q": "quit"},
+        )
 
     def handle_no_discogs_match(self, acr_result: ACRCloudResult) -> str:
         """
@@ -407,23 +420,13 @@ class InteractivePrompts:
         print("  [5] Skip this file")
         print("  [q] Quit")
 
-        while True:
-            choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip().lower()
-
-            if choice == "1":
-                return "acr_only"
-            elif choice == "2":
-                return "retry"
-            elif choice == "3":
-                return "manual_url"
-            elif choice == "4":
-                return "manual"
-            elif choice == "5":
-                return "skip"
-            elif choice == "q":
-                return "quit"
-
-            print(self._c("red", "Invalid selection."))
+        return self._prompt_choice(
+            "Select option:",
+            {
+                "1": "acr_only", "2": "retry", "3": "manual_url",
+                "4": "manual", "5": "skip", "q": "quit",
+            },
+        )
 
     def get_manual_metadata(self, defaults: Optional[TrackMetadata] = None) -> Optional[TrackMetadata]:
         """
@@ -517,15 +520,11 @@ class InteractivePrompts:
             print("  [1] Enter missing values")
             print("  [2] Skip this file")
 
-            while True:
-                choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip()
-
-                if choice == "1":
-                    break
-                elif choice == "2":
-                    return None  # Explicit skip
-
-                print(self._c("red", "Invalid selection."))
+            choice = self._prompt_choice(
+                "Select option:", {"1": "edit", "2": "skip"},
+            )
+            if choice == "skip":
+                return None
 
             # Prompt for missing fields only
             print(f"\n{self._c('cyan', 'Enter missing values:')}")
@@ -600,8 +599,11 @@ class InteractivePrompts:
             current_name = Path(current_path).name
             self.show_file_rename(current_name, new_name)
 
-        choice = input(f"\n{self._c('bold', 'Apply file renames? [y/N]: ')} ").strip().lower()
-        return choice == "y"
+        return self._prompt_choice(
+            "Apply file renames? [y/N]:",
+            {"y": True, "yes": True, "n": False, "no": False},
+            default=False,
+        )
 
     def show_progress(self, current: int, total: int,
                       message: str = "") -> None:
@@ -673,14 +675,7 @@ class InteractivePrompts:
         print("  [2] Skip this file")
         print("  [q] Quit")
 
-        while True:
-            choice = input(f"\n{self._c('bold', 'Select option: ')} ").strip().lower()
-
-            if choice == "1":
-                return "search"
-            elif choice == "2":
-                return "skip"
-            elif choice == "q":
-                return "quit"
-
-            print(self._c("red", "Invalid selection."))
+        return self._prompt_choice(
+            "Select option:",
+            {"1": "search", "2": "skip", "q": "quit"},
+        )

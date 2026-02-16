@@ -184,10 +184,13 @@ class RcloneSyncManager:
             "--retries", "3",
             "--retries-sleep", "10s",
             "--tpslimit", "4",
-            "--transfers", "4",
+            "--transfers", "2",
+            "--onedrive-chunk-size", "5M",
+            "--low-level-retries", "10",
             "--conflict-resolve", "newer",
             "--conflict-loser", "num",
             "--max-lock", "30m",
+            "--no-update-dir-modtime",
         ]
 
         # Add verbosity based on config
@@ -276,6 +279,18 @@ class RcloneSyncManager:
                     self.config.resync = True
                     resync_result = self.run_bisync()
                     self.config.resync = False
+
+                    # Check for any copy failures and retry with direct copy
+                    copy_failures = self._parse_copy_failures()
+                    if copy_failures:
+                        self.logger.info(
+                            f"Found {len(copy_failures)} files that failed during bisync, "
+                            "retrying with direct copy..."
+                        )
+                        direct_results = self._retry_with_direct_copy(copy_failures)
+                        successes = sum(1 for r in direct_results if r.action in ("pushed", "pulled"))
+                        self.logger.info(f"Direct copy: {successes}/{len(copy_failures)} files succeeded")
+
                     return resync_result
 
                 # Check for failed file transfers
@@ -296,6 +311,18 @@ class RcloneSyncManager:
                         self.config.resync = True
                         resync_result = self.run_bisync()
                         self.config.resync = False  # Reset for future calls
+
+                        # Check for any copy failures and retry with direct copy
+                        copy_failures = self._parse_copy_failures()
+                        if copy_failures:
+                            self.logger.info(
+                                f"Found {len(copy_failures)} files that failed during bisync, "
+                                "retrying with direct copy..."
+                            )
+                            direct_results = self._retry_with_direct_copy(copy_failures)
+                            successes = sum(1 for r in direct_results if r.action in ("pushed", "pulled"))
+                            self.logger.info(f"Direct copy: {successes}/{len(copy_failures)} files succeeded")
+
                         return resync_result
                     else:
                         self.logger.error(
@@ -308,6 +335,18 @@ class RcloneSyncManager:
 
             if not is_retryable:
                 self.logger.error("Non-retryable error, stopping")
+
+                # Before giving up, try direct copy for any files that failed
+                copy_failures = self._parse_copy_failures()
+                if copy_failures:
+                    self.logger.info(
+                        f"Found {len(copy_failures)} files that failed during bisync, "
+                        "retrying with direct copy..."
+                    )
+                    direct_results = self._retry_with_direct_copy(copy_failures)
+                    successes = sum(1 for r in direct_results if r.action in ("pushed", "pulled"))
+                    self.logger.info(f"Direct copy: {successes}/{len(copy_failures)} files succeeded")
+
                 return result
 
             # Check max retries (0 = unlimited)
@@ -440,6 +479,48 @@ class RcloneSyncManager:
             self.logger.warning(f"Failed to parse log for failed files: {e}")
 
         return failed_files
+
+    def _parse_copy_failures(self) -> list[str]:
+        """Parse log file for files that failed to copy during bisync."""
+        failed_files: set[str] = set()
+
+        if not self.log_file or not self.log_file.exists():
+            return []
+
+        pattern = re.compile(r"ERROR\s*:\s*(.+?):\s*Failed to copy")
+
+        try:
+            with open(self.log_file, "r") as f:
+                for line in f:
+                    match = pattern.search(line)
+                    if match:
+                        file_path = match.group(1).strip()
+                        if file_path:
+                            failed_files.add(file_path)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse log for copy failures: {e}")
+
+        return list(failed_files)
+
+    def _retry_with_direct_copy(self, failed_files: list[str]) -> list[Resolution]:
+        """Retry failed files using direct rclone copyto (bypasses bisync issues)."""
+        resolutions: list[Resolution] = []
+
+        for file_path in failed_files:
+            if self._interrupted:
+                self.logger.warning("Interrupt detected, stopping direct copy retry")
+                break
+
+            self.logger.info(f"Retrying with direct copy: {file_path}")
+            resolution = self._sync_single_file(file_path)
+            resolutions.append(resolution)
+
+            if resolution.action in ("pushed", "pulled"):
+                self.logger.info(f"Direct copy succeeded: {file_path}")
+            else:
+                self.logger.warning(f"Direct copy failed: {file_path} - {resolution.message}")
+
+        return resolutions
 
     def resolve_remaining_conflicts(self) -> list[Resolution]:
         """Find and resolve any .conflict* files left after sync."""
