@@ -148,6 +148,11 @@ class AudioFile:
         """Check if file needs renaming based on current tags."""
         return file_needs_rename(self.file_path, self.current_tags)
 
+    @property
+    def has_actual_changes(self) -> bool:
+        """Check if proposed tags actually differ from current tags."""
+        return self.proposed_tags is not None and self.proposed_tags != self.current_tags
+
 
 @dataclass
 class AlbumFolder:

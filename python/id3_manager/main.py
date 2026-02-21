@@ -9,6 +9,7 @@ Usage:
 import argparse
 import os
 import sys
+import unicodedata
 from pathlib import Path
 from typing import List, Optional
 
@@ -99,11 +100,21 @@ class ID3Processor:
         if start_at is None:
             return folders
 
+        _norm = lambda p: unicodedata.normalize("NFC", str(p))
         start_at_resolved = start_at.resolve()
 
         for i, folder in enumerate(folders):
             folder_resolved = Path(folder).resolve()
-            if folder_resolved == start_at_resolved:
+            if _norm(folder_resolved) == _norm(start_at_resolved):
+                skipped = i
+                if skipped > 0:
+                    self.prompts.print(f"Skipping {skipped} folder(s) before: {start_at.name}")
+                return folders[i:]
+
+        # Fallback: check if start_at is a parent of any folder
+        for i, folder in enumerate(folders):
+            folder_resolved = Path(folder).resolve()
+            if any(_norm(p) == _norm(start_at_resolved) for p in folder_resolved.parents):
                 skipped = i
                 if skipped > 0:
                     self.prompts.print(f"Skipping {skipped} folder(s) before: {start_at.name}")
@@ -243,7 +254,7 @@ class ID3Processor:
             self.stats.files_processed += 1
 
         # Confirm and apply changes
-        files_with_changes = [af for af in audio_files if af.proposed_tags]
+        files_with_changes = [af for af in audio_files if af.has_actual_changes]
 
         if files_with_changes:
             # Show all proposed changes
@@ -263,7 +274,7 @@ class ID3Processor:
         if not self.args.no_file_rename:
             files_only_needing_rename = [
                 af for af in audio_files
-                if not af.proposed_tags and af.needs_rename
+                if not af.has_actual_changes and af.needs_rename
             ]
             if files_only_needing_rename:
                 self._handle_file_renames(files_only_needing_rename)
@@ -288,7 +299,7 @@ class ID3Processor:
 
         self._process_single_file_obj(af)
 
-        if af.proposed_tags:
+        if af.has_actual_changes:
             self.prompts.show_file_comparison(af)
             result = self.prompts.confirm_tag_changes([af])
 
@@ -343,14 +354,25 @@ class ID3Processor:
                 return folder_release
             elif action == "existing":
                 # Use existing tags for Discogs search
-                if af.current_tags.artist:
+                title = af.current_tags.title or ""
+                artist = af.current_tags.artist or ""
+                album = af.current_tags.album
+
+                if not artist:
+                    self.prompts.print(
+                        f"  Existing tags — title: '{title}', album: '{album or ''}'"
+                    )
+                    artist, title = self.prompts.get_modified_search_query(artist, title)
+
+                if artist:
                     acr_result = type("ACRResult", (), {
-                        "title": af.current_tags.title or "",
-                        "artists": [af.current_tags.artist],
-                        "album": af.current_tags.album,
+                        "title": title,
+                        "artists": [artist],
+                        "album": album,
                         "confidence": 0.0
                     })()
                 else:
+                    self.prompts.print("  No artist provided, skipping.")
                     self.stats.files_skipped += 1
                     return folder_release
             elif action == "skip":
