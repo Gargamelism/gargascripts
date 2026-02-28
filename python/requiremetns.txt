@@ -12,3 +12,6 @@ music21==9.5.*
 numpy==1.26.*
 pydantic==2.11.*
 pytest==8.3.*
+# telegram_bots/log_review
+python-dotenv==1.0.*
+requests==2.32.*
