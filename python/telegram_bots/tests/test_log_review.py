@@ -11,12 +11,11 @@ import pytest
 # Allow importing log_review from the parent directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from log_review import (
+from rclone_log_analyze import (
     LogDigest,
     build_fallback_analysis,
     extract_log_digest,
     format_telegram_message,
-    parse_claude_response,
 )
 
 
@@ -165,68 +164,6 @@ class TestExtractLogDigest:
 
         assert digest.files_deleted == 1
         assert len(digest.folders_not_deleted) == 1
-
-
-# ─── parse_claude_response tests ─────────────────────────────────────────────
-
-class TestParseClaudeResponse:
-
-    def test_parse_all_fields(self):
-        response = (
-            "STATUS: Success\n"
-            "STATUS_DETAIL: Bisync completed cleanly.\n"
-            "SYNC_STATS: 13 new, 0 modified, 7 deleted (52.2 MiB)\n"
-            "ERRORS_SUMMARY: None\n"
-            "RESYNC: No\n"
-            "FOLDERS_SKIPPED: None\n"
-            "CONFLICTS: None\n"
-            "DURATION: 33 min 24 sec\n"
-            "NOTABLE: None\n"
-        )
-        result = parse_claude_response(response)
-
-        assert result["STATUS"] == "Success"
-        assert result["STATUS_DETAIL"] == "Bisync completed cleanly."
-        assert result["SYNC_STATS"] == "13 new, 0 modified, 7 deleted (52.2 MiB)"
-        assert result["ERRORS_SUMMARY"] == "None"
-        assert result["DURATION"] == "33 min 24 sec"
-        assert len(result) == 9
-
-    def test_parse_multiline_errors(self):
-        response = (
-            "STATUS: Failed\n"
-            "STATUS_DETAIL: IO errors prevented deletion.\n"
-            "SYNC_STATS: No file changes\n"
-            "ERRORS_SUMMARY: - Failed to set modification time: EOF\n"
-            "- not deleting files as there were IO errors\n"
-            "RESYNC: No\n"
-            "FOLDERS_SKIPPED: None\n"
-            "CONFLICTS: None\n"
-            "DURATION: 5 min 0 sec\n"
-            "NOTABLE: None\n"
-        )
-        result = parse_claude_response(response)
-
-        assert "Failed to set modification time" in result["ERRORS_SUMMARY"]
-        assert "not deleting files" in result["ERRORS_SUMMARY"]
-
-    def test_parse_missing_field(self):
-        response = (
-            "STATUS: Success\n"
-            "STATUS_DETAIL: All good.\n"
-            "SYNC_STATS: No file changes\n"
-            "ERRORS_SUMMARY: None\n"
-            "RESYNC: No\n"
-            "FOLDERS_SKIPPED: None\n"
-            "CONFLICTS: None\n"
-            "DURATION: 30 min 0 sec\n"
-            # NOTABLE is missing
-        )
-        result = parse_claude_response(response)
-
-        assert "NOTABLE" not in result
-        assert result["STATUS"] == "Success"
-        assert len(result) == 8
 
 
 # ─── format_telegram_message tests ───────────────────────────────────────────
