@@ -6,21 +6,21 @@ from music21 import key, stream, meter, note, tempo
 from pprint import pformat
 from typing import List, Optional
 
-from helper import Melody, positive_num
-from rule_engine.rule_engine import RuleEngine
-from melodic_dictation.melodic_context import MelodicContext
-from melodic_dictation.melodic_rules.step_movement_rule import StepDownMovementRule, StepUpMovementRule
-from melodic_dictation.melodic_rules.small_leap_movement_rule import SmallLeapDownMovementRule, SmallLeapUpMovementRule
-from melodic_dictation.melodic_rules.medium_leap_movement_rule import (
+from ..helper import Melody, positive_num
+from ..rule_engine.rule_engine import RuleEngine
+from .melodic_context import MelodicContext
+from .melodic_rules.step_movement_rule import StepDownMovementRule, StepUpMovementRule
+from .melodic_rules.small_leap_movement_rule import SmallLeapDownMovementRule, SmallLeapUpMovementRule
+from .melodic_rules.medium_leap_movement_rule import (
     MediumLeapDownMovementRule,
     MediumLeapUpMovementRule,
 )
-from melodic_dictation.melodic_rules.large_leap_movement_rule import (
+from .melodic_rules.large_leap_movement_rule import (
     LargeLeapDownMovementRule,
     LargeLeapUpMovementRule,
 )
-from melodic_dictation.melodic_rules.return_to_tonic_rule import ReturnToTonicRule
-from melodic_dictation.melodic_rules.minor_scale_variant_rule import MinorScaleVariantRule
+from .melodic_rules.return_to_tonic_rule import ReturnToTonicRule
+from .melodic_rules.minor_scale_variant_rule import MinorScaleVariantRule
 
 TEMPO = 60
 

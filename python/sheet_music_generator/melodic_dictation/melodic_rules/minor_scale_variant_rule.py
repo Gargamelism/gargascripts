@@ -1,8 +1,8 @@
 from music21 import note
 import random
 
-from melodic_dictation.melodic_rules.melodic_base_rule import MelodicBaseRule
-from melodic_dictation.melodic_context import MelodicContext
+from .melodic_base_rule import MelodicBaseRule
+from ..melodic_context import MelodicContext
 
 
 class MinorScaleVariantRule(MelodicBaseRule):

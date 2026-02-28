@@ -1,8 +1,8 @@
 import logging
 from music21 import note, key
 
-from rule_engine.rule_base import RuleBase
-from melodic_dictation.melodic_context import MelodicContext
+from ...rule_engine.rule_base import RuleBase
+from ..melodic_context import MelodicContext
 
 
 class MelodicBaseRule(RuleBase):

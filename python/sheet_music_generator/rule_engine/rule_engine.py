@@ -2,7 +2,7 @@ import random
 from typing import Any, List
 from music21 import scale, note
 
-from rule_engine.rule_base import RuleBase
+from .rule_base import RuleBase
 
 
 class RuleEngine:

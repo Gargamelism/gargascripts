@@ -11,8 +11,8 @@ from datetime import datetime
 import subprocess
 from typing import List, Optional, Union
 
-from melodic_dictation.melodic_dictation import generate_dictation_notes
-from helper import Melody, get_key_notes, get_sound_font_path, positive_num
+from .melodic_dictation.melodic_dictation import generate_dictation_notes
+from .helper import Melody, get_key_notes, get_sound_font_path, positive_num
 
 SOUND_FONT_FOLDER_PATH = "/home/gargamel/soundfonts"
 

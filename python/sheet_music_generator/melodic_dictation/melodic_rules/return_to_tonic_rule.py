@@ -1,6 +1,6 @@
 import random
 from music21 import note
-from melodic_dictation.melodic_rules.melodic_base_rule import MelodicBaseRule
+from .melodic_base_rule import MelodicBaseRule
 
 
 class ReturnToTonicRule(MelodicBaseRule):

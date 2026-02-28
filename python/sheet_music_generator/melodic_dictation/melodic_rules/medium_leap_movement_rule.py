@@ -1,5 +1,5 @@
 import random
-from melodic_dictation.melodic_rules.melodic_base_rule import MelodicBaseRule
+from .melodic_base_rule import MelodicBaseRule
 
 
 class MediumLeapUpMovementRule(MelodicBaseRule):
