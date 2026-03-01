@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/post-edit-checks.sh",
+            "timeout": 120,
+            "statusMessage": "Running formatter, linter & tests..."
+          }
+        ]
+      }
+    ]
+  }
+}
