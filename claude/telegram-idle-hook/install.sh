@@ -76,7 +76,7 @@ already_installed = any(
 )
 
 if already_installed:
-    print("  ℹ Stop hook already present — skipping.")
+    print("  [skip] Stop hook already present.")
 else:
     # Use tilde path for portability
     new_stop_hook["hooks"][0]["command"] = hook_cmd_tilde
@@ -87,22 +87,47 @@ else:
     print(f"  [ok] Added Stop hook to {settings_path}")
 EOF
 
-# ── 4. Verify .env ────────────────────────────────────────────────────────────
-ENV_FILE="/Volumes/data_2/dev/gargascripts/python/telegram_bots/.env"
+# ── 4. Ask for .env path and patch daemon ─────────────────────────────────────
+DEFAULT_ENV="$REPO_DIR/../../../python/telegram_bots/.env"
+DEFAULT_ENV="$(python3 -c "import pathlib; print(pathlib.Path('$DEFAULT_ENV').resolve())" 2>/dev/null || echo "$DEFAULT_ENV")"
+
 echo ""
+echo "Path to Telegram .env file (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID):"
+read -r -p "  [${DEFAULT_ENV}]: " ENV_FILE
+ENV_FILE="${ENV_FILE:-$DEFAULT_ENV}"
+# Expand ~ if present
+ENV_FILE="${ENV_FILE/#\~/$HOME}"
+
 if [[ -f "$ENV_FILE" ]]; then
   if grep -q "TELEGRAM_BOT_TOKEN" "$ENV_FILE" && grep -q "TELEGRAM_CHAT_ID" "$ENV_FILE"; then
-    echo "[ok] .env found with required keys."
+    echo "  [ok] .env found with required keys."
   else
-    echo "WARNING: .env exists but may be missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID."
-    echo "  Edit: $ENV_FILE"
+    echo "  WARNING: .env exists but may be missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID."
   fi
 else
-  echo "WARNING: .env not found at $ENV_FILE"
+  echo "  WARNING: file not found at $ENV_FILE"
   echo "  Create it with:"
   echo "    TELEGRAM_BOT_TOKEN=your_token_here"
   echo "    TELEGRAM_CHAT_ID=your_chat_id_here"
 fi
+
+# Patch ENV_PATH in the daemon source file
+echo ""
+echo "Setting ENV_PATH in daemon..."
+$PYTHON - "$REPO_DIR/telegram_idle_daemon.py" "$ENV_FILE" <<'EOF'
+import sys, pathlib, re
+daemon = pathlib.Path(sys.argv[1])
+env_path = sys.argv[2]
+text = daemon.read_text(encoding="utf-8")
+text = re.sub(
+    r'^ENV_PATH\s*=\s*Path\(.*?\)',
+    f'ENV_PATH = Path("{env_path}")',
+    text,
+    flags=re.MULTILINE,
+)
+daemon.write_text(text, encoding="utf-8")
+print(f"  [ok] ENV_PATH set to {env_path}")
+EOF
 
 # ── 5. Summary ────────────────────────────────────────────────────────────────
 echo ""
