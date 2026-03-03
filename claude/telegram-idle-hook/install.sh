@@ -87,12 +87,11 @@ else:
     print(f"  [ok] Added Stop hook to {settings_path}")
 EOF
 
-# ── 4. Ask for .env path and patch daemon ─────────────────────────────────────
-DEFAULT_ENV="$REPO_DIR/../../../python/telegram_bots/.env"
-DEFAULT_ENV="$(python3 -c "import pathlib; print(pathlib.Path('$DEFAULT_ENV').resolve())" 2>/dev/null || echo "$DEFAULT_ENV")"
+# ── 4. Ask where the .env file should live and create/verify it ───────────────
+DEFAULT_ENV="$HOME/.claude/.env"
 
 echo ""
-echo "Path to Telegram .env file (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID):"
+echo "Where should the Telegram .env file be stored?"
 read -r -p "  [${DEFAULT_ENV}]: " ENV_FILE
 ENV_FILE="${ENV_FILE:-$DEFAULT_ENV}"
 # Expand ~ if present
@@ -102,13 +101,19 @@ if [[ -f "$ENV_FILE" ]]; then
   if grep -q "TELEGRAM_BOT_TOKEN" "$ENV_FILE" && grep -q "TELEGRAM_CHAT_ID" "$ENV_FILE"; then
     echo "  [ok] .env found with required keys."
   else
-    echo "  WARNING: .env exists but may be missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID."
+    echo "  WARNING: .env exists but is missing required keys."
+    echo "  Add to $ENV_FILE:"
+    echo "    TELEGRAM_BOT_TOKEN=your_token_here"
+    echo "    TELEGRAM_CHAT_ID=your_chat_id_here"
   fi
 else
-  echo "  WARNING: file not found at $ENV_FILE"
-  echo "  Create it with:"
-  echo "    TELEGRAM_BOT_TOKEN=your_token_here"
-  echo "    TELEGRAM_CHAT_ID=your_chat_id_here"
+  echo "  File not found — creating $ENV_FILE ..."
+  mkdir -p "$(dirname "$ENV_FILE")"
+  read -r -p "  TELEGRAM_BOT_TOKEN: " BOT_TOKEN
+  read -r -p "  TELEGRAM_CHAT_ID:   " CHAT_ID
+  printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\n' "$BOT_TOKEN" "$CHAT_ID" > "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  echo "  [ok] Created $ENV_FILE"
 fi
 
 # Patch ENV_PATH in the daemon source file
