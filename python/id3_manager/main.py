@@ -10,6 +10,7 @@ import argparse
 import os
 import sys
 import unicodedata
+from dataclasses import replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -253,6 +254,9 @@ class ID3Processor:
             folder_release = self._process_single_file_obj(af, folder_release)
             self.stats.files_processed += 1
 
+        # Fill in disc info from folder structure for any file still missing it
+        self._backfill_disc_info(audio_files)
+
         # Confirm and apply changes
         files_with_changes = [af for af in audio_files if af.has_actual_changes]
 
@@ -453,7 +457,7 @@ class ID3Processor:
                 album_artist=release.artists[0] if release.artists else None,
                 track_number=track.track_number,
                 total_tracks=len(release.tracklist),
-                disc_number=track.disc_number,
+                disc_number=track.disc_number or af.inferred_disc_number,
                 total_discs=release.total_discs if release.total_discs > 1 else None,
                 year=release.year,
                 genre=release.genres[0] if release.genres else None,
@@ -654,7 +658,7 @@ class ID3Processor:
             album_artist=release.artists[0] if release.artists else None,
             track_number=track.track_number if track else None,
             total_tracks=len(release.tracklist),
-            disc_number=track.disc_number if track else None,
+            disc_number=(track.disc_number if track else None) or af.inferred_disc_number,
             total_discs=release.total_discs if release.total_discs > 1 else None,
             year=release.year,
             genre=release.genres[0] if release.genres else None,
@@ -691,6 +695,20 @@ class ID3Processor:
         # Handle file renaming (unless disabled)
         if not self.args.no_file_rename:
             self._handle_file_renames(audio_files)
+
+    def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:
+        """Fill in disc info from folder structure for files where it is missing."""
+        for af in audio_files:
+            tags = af.proposed_tags or af.current_tags
+            if tags.disc_number and tags.total_discs and tags.total_discs > 1:
+                continue
+            disc_info = self.folder_manager.infer_disc_info_from_path(af.file_path)
+            if disc_info:
+                af.proposed_tags = replace(
+                    tags,
+                    disc_number=tags.disc_number or disc_info[0],
+                    total_discs=disc_info[1],
+                )
 
     def _handle_file_renames(self, audio_files: List[AudioFile]) -> None:
         """Handle file renaming based on metadata."""

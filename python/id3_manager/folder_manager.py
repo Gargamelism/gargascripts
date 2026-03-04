@@ -70,6 +70,23 @@ class FolderManager:
                 return int(match.group(1))
         return None
 
+    def infer_disc_info_from_path(self, file_path: str) -> Optional[Tuple[int, int]]:
+        """Infer disc number and total discs from the file's parent folder name.
+
+        Returns (disc_number, total_discs) if the file is in a disc subfolder
+        that has at least one sibling disc folder, otherwise None.
+        """
+        parent = Path(file_path).parent
+        disc_num = self._extract_disc_number(parent.name)
+        if disc_num is None:
+            return None
+        grandparent = parent.parent
+        sibling_disc_count = sum(
+            1 for d in grandparent.iterdir()
+            if d.is_dir() and self._extract_disc_number(d.name) is not None
+        )
+        return (disc_num, sibling_disc_count) if sibling_disc_count >= 2 else None
+
     def normalize_disc_folder_name(self, folder_path: str, disc_number: int,
                                    dry_run: bool = False) -> Tuple[bool, str]:
         """

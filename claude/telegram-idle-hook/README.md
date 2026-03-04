@@ -16,6 +16,7 @@ Reply on Telegram and the message is automatically injected back into Claude Cod
 ## Prerequisites
 
 - macOS (uses `osascript` for injection)
+- Python 3.10+ at `/opt/homebrew/bin/python3.12` (install via `brew install python@3.12`)
 - Claude Code installed (`~/.claude/`)
 - A Telegram bot with a token and your chat ID stored in `.env`:
 
@@ -42,7 +43,8 @@ bash claude/telegram-idle-hook/install.sh
 The installer:
 - Symlinks hook scripts into `~/.claude/hooks/`
 - Adds the `Stop` hook to `~/.claude/settings.json`
-- Prompts for your `.env` file path and writes it into the daemon
+- Asks where to store the `.env` file (default: `~/.claude/.env`), creates it if missing,
+  and writes the path into the daemon
 
 ## Files
 
