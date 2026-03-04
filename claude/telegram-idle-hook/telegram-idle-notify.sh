@@ -10,7 +10,7 @@
 set -euo pipefail
 
 DAEMON="$HOME/.claude/hooks/telegram_idle_daemon.py"
-PYTHON="/usr/bin/python3"
+PYTHON="/opt/homebrew/bin/python3.12"
 
 # ── Read stdin JSON from Claude ───────────────────────────────────────────────
 INPUT=$(cat)
@@ -40,8 +40,10 @@ try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if msg.get("role") == "assistant":
-                c = msg.get("content", "")
+            # Transcript entries wrap the message under a "message" key
+            entry = msg.get("message", msg)
+            if entry.get("role") == "assistant":
+                c = entry.get("content", "")
                 if isinstance(c, str):
                     last = c
                 elif isinstance(c, list):
@@ -79,6 +81,9 @@ with open(sys.argv[5], 'w') as f:
 " "$SESSION_ID" "$TIMESTAMP" "$LAST_MSG" "$TERM_PROG" "$TOKEN_FILE" 2>/dev/null || true
 
 # ── Spawn daemon detached ─────────────────────────────────────────────────────
+# Kill any existing daemon instances to prevent duplicate getUpdates polling (→ 409)
+pkill -f "telegram_idle_daemon.py" 2>/dev/null || true
+
 if [[ -f "$DAEMON" ]]; then
   nohup "$PYTHON" "$DAEMON" "$TOKEN_FILE" \
     >> /tmp/claude_idle_daemon.log 2>&1 &

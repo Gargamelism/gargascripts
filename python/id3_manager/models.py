@@ -153,6 +153,11 @@ class AudioFile:
         """Check if proposed tags actually differ from current tags."""
         return self.proposed_tags is not None and self.proposed_tags != self.current_tags
 
+    @property
+    def inferred_disc_number(self) -> Optional[int]:
+        """Return disc_number already set in proposed_tags (e.g. from folder structure), if any."""
+        return self.proposed_tags.disc_number if self.proposed_tags else None
+
 
 @dataclass
 class AlbumFolder:

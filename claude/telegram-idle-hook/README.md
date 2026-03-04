@@ -16,6 +16,7 @@ Reply on Telegram and the message is automatically injected back into Claude Cod
 ## Prerequisites
 
 - macOS (uses `osascript` for injection)
+- Python 3.10+ at `/opt/homebrew/bin/python3.12` (install via `brew install python@3.12`)
 - Claude Code installed (`~/.claude/`)
 - A Telegram bot with a token and your chat ID stored in `.env`:
 

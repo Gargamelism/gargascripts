@@ -254,6 +254,9 @@ class ID3Processor:
             folder_release = self._process_single_file_obj(af, folder_release)
             self.stats.files_processed += 1
 
+        # Fill in disc info from folder structure for any file still missing it
+        self._backfill_disc_info(audio_files)
+
         # Confirm and apply changes
         files_with_changes = [af for af in audio_files if af.has_actual_changes]
 
@@ -446,9 +449,6 @@ class ID3Processor:
             af.discogs_release = release
             af.discogs_track = track
 
-            # Preserve disc_number pre-set by _process_disc from folder structure
-            pre_disc_number = af.proposed_tags.disc_number if af.proposed_tags else None
-
             # Build proposed tags
             proposed = TrackMetadata(
                 title=track.title,
@@ -457,7 +457,7 @@ class ID3Processor:
                 album_artist=release.artists[0] if release.artists else None,
                 track_number=track.track_number,
                 total_tracks=len(release.tracklist),
-                disc_number=track.disc_number or pre_disc_number,
+                disc_number=track.disc_number or af.inferred_disc_number,
                 total_discs=release.total_discs if release.total_discs > 1 else None,
                 year=release.year,
                 genre=release.genres[0] if release.genres else None,
@@ -650,9 +650,6 @@ class ID3Processor:
         af.discogs_release = release
         af.discogs_track = track
 
-        # Preserve disc_number pre-set by _process_disc from folder structure
-        pre_disc_number = af.proposed_tags.disc_number if af.proposed_tags else None
-
         # Build proposed tags
         proposed = TrackMetadata(
             title=track.title if track else acr_result.title,
@@ -661,7 +658,7 @@ class ID3Processor:
             album_artist=release.artists[0] if release.artists else None,
             track_number=track.track_number if track else None,
             total_tracks=len(release.tracklist),
-            disc_number=(track.disc_number if track else None) or pre_disc_number,
+            disc_number=(track.disc_number if track else None) or af.inferred_disc_number,
             total_discs=release.total_discs if release.total_discs > 1 else None,
             year=release.year,
             genre=release.genres[0] if release.genres else None,
@@ -699,6 +696,20 @@ class ID3Processor:
         if not self.args.no_file_rename:
             self._handle_file_renames(audio_files)
 
+    def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:
+        """Fill in disc info from folder structure for files where it is missing."""
+        for af in audio_files:
+            tags = af.proposed_tags or af.current_tags
+            if tags.disc_number and tags.total_discs and tags.total_discs > 1:
+                continue
+            disc_info = self.folder_manager.infer_disc_info_from_path(af.file_path)
+            if disc_info:
+                af.proposed_tags = replace(
+                    tags,
+                    disc_number=tags.disc_number or disc_info[0],
+                    total_discs=disc_info[1],
+                )
+
     def _handle_file_renames(self, audio_files: List[AudioFile]) -> None:
         """Handle file renaming based on metadata."""
         # Collect files that need renaming
@@ -706,16 +717,6 @@ class ID3Processor:
         for af in audio_files:
             # Use proposed tags if available, else current tags
             metadata = af.proposed_tags or af.current_tags
-
-            # Safety net: if disc info is missing, try to infer from folder structure
-            if not (metadata.disc_number and metadata.total_discs and metadata.total_discs > 1):
-                disc_info = self.folder_manager.infer_disc_info_from_path(af.file_path)
-                if isinstance(disc_info, tuple):
-                    metadata = replace(
-                        metadata,
-                        disc_number=metadata.disc_number or disc_info[0],
-                        total_discs=disc_info[1],
-                    )
 
             # Check if file needs renaming
             if not self.folder_manager.should_rename_file(af.file_path, metadata):

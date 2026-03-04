@@ -379,6 +379,7 @@ class TestApplyTagChanges:
         processor.id3_handler.write_tags = Mock(return_value=True)
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=False)
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         af = AudioFile(
             file_path="/test/song.mp3",
@@ -399,6 +400,7 @@ class TestApplyTagChanges:
         processor.id3_handler.write_tags = Mock(return_value=False)
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=False)
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         af = AudioFile(
             file_path="/test/song.mp3",
@@ -449,6 +451,7 @@ class TestHandleFileRenames:
         processor.id3_handler.write_tags = Mock(return_value=True)
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=False)
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         af = AudioFile(
             file_path="/test/Artist - Album - 01 - Song.mp3",
@@ -848,6 +851,7 @@ class TestRenameOnly:
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
         processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
         processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         af = AudioFile(
             file_path="/test/wrong_name.mp3",
@@ -888,6 +892,7 @@ class TestRenameOnly:
         processor.folder_manager.should_rename_file = Mock(return_value=True)
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
         processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         with patch('main.ID3Handler.is_supported', return_value=True):
             with patch('main.ID3Handler.get_format', return_value="mp3"):
@@ -914,6 +919,7 @@ class TestFilesOnlyNeedingRename:
         processor.folder_manager.should_rename_file = Mock(return_value=True)
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
         processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         # File has complete tags but wrong filename
         af = AudioFile(

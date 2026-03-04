@@ -109,8 +109,14 @@ if [[ -f "$ENV_FILE" ]]; then
 else
   echo "  File not found — creating $ENV_FILE ..."
   mkdir -p "$(dirname "$ENV_FILE")"
-  read -r -p "  TELEGRAM_BOT_TOKEN: " BOT_TOKEN
-  read -r -p "  TELEGRAM_CHAT_ID:   " CHAT_ID
+  while [[ -z "$BOT_TOKEN" ]]; do
+    read -r -s -p "  TELEGRAM_BOT_TOKEN: " BOT_TOKEN; echo
+    [[ -z "$BOT_TOKEN" ]] && echo "  ERROR: Token cannot be empty."
+  done
+  while [[ -z "$CHAT_ID" ]]; do
+    read -r -s -p "  TELEGRAM_CHAT_ID:   " CHAT_ID; echo
+    [[ -z "$CHAT_ID" ]] && echo "  ERROR: Chat ID cannot be empty."
+  done
   printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\n' "$BOT_TOKEN" "$CHAT_ID" > "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   echo "  [ok] Created $ENV_FILE"

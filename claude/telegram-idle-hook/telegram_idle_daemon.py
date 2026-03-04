@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Telegram idle notifier daemon for Claude Code.
 
@@ -23,9 +23,9 @@ from pathlib import Path
 
 ENV_PATH = Path("/Volumes/data_2/dev/gargascripts/python/telegram_bots/.env")
 
-IDLE_WAIT_SECONDS = 5 * 60       # Wait this long before notifying
-POLL_CHECK_INTERVAL = 30          # Seconds between activity checks during idle wait
-TELEGRAM_REPLY_TIMEOUT = 15 * 60  # Give up waiting for Telegram reply after this
+IDLE_WAIT_SECS = 5 * 60       # Wait this long before notifying
+POLL_CHECK_INTERVAL_SECS = 30          # Seconds between activity checks during idle wait
+TELEGRAM_REPLY_TIMEOUT_SECS = 60 * 60  # Give up waiting for Telegram reply after this
 TELEGRAM_LONG_POLL_SECS = 30      # Telegram getUpdates long-poll timeout per call
 
 
@@ -175,9 +175,9 @@ def main() -> None:
     log(f"Session: {session_id}, app: {term_program}")
 
     # ── Wait up to IDLE_WAIT_SECONDS, checking for new activity ──────────────
-    checks = IDLE_WAIT_SECONDS // POLL_CHECK_INTERVAL
+    checks = IDLE_WAIT_SECS // POLL_CHECK_INTERVAL_SECS
     for i in range(checks):
-        time.sleep(POLL_CHECK_INTERVAL)
+        time.sleep(POLL_CHECK_INTERVAL_SECS)
         try:
             current = json.loads(token_file.read_text())
             if current.get("timestamp", 0) != my_timestamp:
@@ -188,7 +188,7 @@ def main() -> None:
             sys.exit(0)
         except Exception:
             pass
-        log(f"Still idle ({(i + 1) * POLL_CHECK_INTERVAL}s / {IDLE_WAIT_SECONDS}s)")
+        log(f"Still idle ({(i + 1) * POLL_CHECK_INTERVAL_SECS}s / {IDLE_WAIT_SECS}s)")
 
     log("Idle timeout reached — sending Telegram notification.")
 
@@ -219,21 +219,13 @@ def main() -> None:
         sys.exit(1)
 
     # ── Poll for Telegram reply ───────────────────────────────────────────────
-    deadline = time.time() + TELEGRAM_REPLY_TIMEOUT
-    log(f"Waiting up to {TELEGRAM_REPLY_TIMEOUT // 60} min for Telegram reply...")
+    deadline = time.time() + TELEGRAM_REPLY_TIMEOUT_SECS
+    log(f"Waiting up to {TELEGRAM_REPLY_TIMEOUT_SECS // 60} min for Telegram reply...")
 
     reply, _ = poll_for_reply(bot_token, chat_id, offset, deadline)
 
     if reply is None:
         log("No Telegram reply received within timeout.")
-        try:
-            send_message(
-                bot_token,
-                chat_id,
-                "No reply received -- Claude Code is still waiting.",
-            )
-        except Exception:
-            pass
         sys.exit(0)
 
     log(f"Got Telegram reply: {reply!r}")
