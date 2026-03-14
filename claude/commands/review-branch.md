@@ -32,6 +32,10 @@ Analyze the diff above and evaluate against each principle below. For each findi
 11. **Functional / Declarative** — Prefer declarative expressions (`map`, `filter`, `reduce`, comprehensions, pipelines) over imperative loops with mutation where readability is equal or better.
 12. **Readability over Cleverness** — Flag clever one-liners, obscure tricks, or dense logic that sacrifices readability. Simple and clear wins.
 13. **Secure at Core** — Flag any place where data could leak externally (logging secrets, sending PII to third parties, storing credentials in code, unvalidated inputs crossing trust boundaries).
+14. **Security Scrutiny** — Flag unvalidated or unsanitized input data crossing trust boundaries, use of dependencies with known CVEs, and insecure access patterns (overly permissive roles, missing auth checks, hardcoded credentials).
+15. **Readability & Configurability** — No magic numbers or magic strings. Static values should be named constants; dynamic or environment-specific values should be read from config or environment variables. Flag literals scattered through logic.
+16. **Test Coverage** — Verify edge cases and failure paths are exercised, not just the happy path. Flag tests whose assertions duplicate the implementation logic (testing the implementation, not the behavior), or that mock the very outcome being tested (making the test vacuously pass).
+17. **Privacy** — PII and PHI must be handled with the highest care: not written to logs, not sent to third-party services without explicit need, stored with appropriate encryption and access controls. Flag any code path where personal data could be inadvertently exposed or persisted insecurely.
 
 ## Output Format
 

@@ -26,6 +26,27 @@ Identify all unresolved items:
 - Undecided architectural choices
 - Sections where the next developer would have to guess
 
+**Also audit the plan against these code quality principles** — flag any that the plan fails to address:
+1. **DRY** — Does the plan avoid duplicating logic that already exists?
+2. **Don't Reinvent the Wheel** — Does the plan leverage existing libraries instead of hand-rolling standard functionality?
+3. **Naming** — Are proposed names clear, unambiguous, and free of vague terms?
+4. **KISS** — Is the proposed solution as simple as the problem allows? No unnecessary abstraction?
+5. **YAGNI** — Does the plan avoid scaffolding for future use cases that aren't needed now?
+6. **OCP** — Is new behavior additive? Can it be extended without modifying existing internals?
+7. **Separation of Concerns** — Are distinct responsibilities (IO, business logic, presentation) kept separate?
+8. **Encapsulation** — Are implementation details hidden behind appropriate interfaces?
+9. **Testability** — Are dependencies injected? Is global mutable state avoided?
+10. **Fail Fast** — Does the plan surface errors immediately rather than deferring or silently swallowing them?
+11. **Functional / Declarative** — Does the plan prefer declarative patterns over imperative mutation where clarity is equal or better?
+12. **Readability over Cleverness** — Does the plan avoid clever tricks that sacrifice readability?
+13. **Secure at Core** — Does the plan prevent secrets/PII from leaking externally or credentials from being hardcoded?
+14. **Security Scrutiny** — Does the plan validate/sanitize inputs, use dependency versions free of known CVEs, and enforce proper access controls?
+15. **Readability & Configurability** — Does the plan use named constants for static values and config/env vars for dynamic ones (no magic numbers/strings)?
+16. **Test Coverage** — Does the plan include tests for edge cases and failure paths, with assertions that test behavior not implementation?
+17. **Privacy** — Does the plan handle PII/PHI with care: not logged, not sent to third parties unnecessarily, stored with encryption and access controls?
+
+Each violated principle is an unresolved item — treat it the same as any other gap and address it in Steps 2–3.
+
 If none remain, stop and emit `PLAN COMPLETE`.
 
 **Step 2 — Research** (parallel agents):
