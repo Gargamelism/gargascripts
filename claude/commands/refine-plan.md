@@ -42,7 +42,7 @@ Identify all unresolved items:
 13. **Secure at Core** — Does the plan prevent secrets/PII from leaking externally or credentials from being hardcoded?
 14. **Security Scrutiny** — Does the plan validate/sanitize inputs, use dependency versions free of known CVEs, and enforce proper access controls?
 15. **Readability & Configurability** — Does the plan use named constants for static values and config/env vars for dynamic ones (no magic numbers/strings)?
-16. **Test Coverage** — Does the plan include tests for edge cases and failure paths, with assertions that test behavior not implementation?
+16. **Test Coverage** — Does the plan include tests for edge cases and failure paths, with assertions that test behavior not implementation? Every new behavior must have a test that would fail without the implementation (red-green). Ask: *"What test would catch a complete no-op of this feature?"* — if no such test exists, the plan is incomplete. Common blind spots: framework overrides, wrong defaults, missing DB records.
 17. **Privacy** — Does the plan handle PII/PHI with care: not logged, not sent to third parties unnecessarily, stored with encryption and access controls?
 
 Each violated principle is an unresolved item — treat it the same as any other gap and address it in Steps 2–3.
