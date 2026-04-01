@@ -678,22 +678,29 @@ class ID3Processor:
 
     def _apply_tag_changes(self, audio_files: List[AudioFile]) -> None:
         """Apply proposed tag changes to files."""
+        write_failed = False
         for af in audio_files:
             if af.proposed_tags:
                 if self.args.dry_run:
                     self.prompts.print(f"  [DRY RUN] Would update: {Path(af.file_path).name}")
                 else:
-                    success = self.id3_handler.write_tags(
-                        af.file_path, af.proposed_tags, preserve_existing=True
-                    )
+                    try:
+                        success = self.id3_handler.write_tags(
+                            af.file_path, af.proposed_tags, preserve_existing=True
+                        )
+                    except RuntimeError as e:
+                        self.stats.errors.append(str(e))
+                        self.prompts.print(f"  Error: {e}")
+                        write_failed = True
+                        break
                     if success:
                         self.stats.tags_updated += 1
                         self.prompts.print(f"  Updated: {Path(af.file_path).name}")
                     else:
                         self.stats.errors.append(f"Failed to write tags: {af.file_path}")
 
-        # Handle file renaming (unless disabled)
-        if not self.args.no_file_rename:
+        # Handle file renaming (unless disabled or a write failed)
+        if not write_failed and not self.args.no_file_rename:
             self._handle_file_renames(audio_files)
 
     def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:

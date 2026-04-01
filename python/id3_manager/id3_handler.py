@@ -173,21 +173,56 @@ class ID3Handler:
         path = Path(file_path)
         ext = path.suffix.lower()
 
+        # Pre-write validation: skip already-unreadable files
+        try:
+            self.read_tags(file_path)
+        except Exception as e:
+            eprint(f"Skipping unreadable file (won't write): {path.name} - {e}")
+            return False
+
+        # In-memory backup so we can restore if the write corrupts the file
+        try:
+            original_bytes = path.read_bytes()
+        except OSError as e:
+            eprint(f"Cannot read file for backup: {path.name} - {e}")
+            return False
+
         try:
             if preserve_existing:
                 existing = self.read_tags(file_path)
                 metadata = existing.merge_with(metadata)
 
             if ext == ".mp3":
-                return self._write_mp3_tags(file_path, metadata)
+                ok = self._write_mp3_tags(file_path, metadata)
             elif ext == ".flac":
-                return self._write_flac_tags(file_path, metadata)
+                ok = self._write_flac_tags(file_path, metadata)
             elif ext == ".m4a":
-                return self._write_m4a_tags(file_path, metadata)
-            return False
+                ok = self._write_m4a_tags(file_path, metadata)
+            else:
+                return False
+
+            if not ok:
+                path.write_bytes(original_bytes)
+                return False
+
+            # Post-write validation: re-read to confirm the file is still valid
+            try:
+                self.read_tags(file_path)
+            except Exception as e:
+                path.write_bytes(original_bytes)
+                raise RuntimeError(
+                    f"Write corrupted {path.name} — original restored"
+                ) from e
+
+            return True
+
+        except RuntimeError:
+            raise
         except Exception as e:
-            eprint(f"Error writing tags to {file_path}: {e}")
-            return False
+            path.write_bytes(original_bytes)
+            raise RuntimeError(
+                f"Failed to write tags to {path.name} — original restored"
+            ) from e
 
     def _write_mp3_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
         """Write ID3v2 tags to MP3 file."""

@@ -1,13 +1,16 @@
 """Tests for id3_handler.py tag parsing utilities."""
 
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from id3_handler import ID3Handler
+from models import TrackMetadata
 
 
 @pytest.fixture
@@ -134,3 +137,103 @@ class TestGetFormat:
         """Should return None for unsupported formats."""
         assert ID3Handler.get_format("/path/to/song.wav") is None
         assert ID3Handler.get_format("/path/to/song.ogg") is None
+
+
+class TestWriteTags:
+    """Tests for write_tags backup/restore and validation."""
+
+    def _make_metadata(self):
+        return TrackMetadata(
+            title="Test Song",
+            artist="Test Artist",
+            album="Test Album",
+            track_number=1,
+        )
+
+    def test_skips_already_malformed_file(self, handler, tmp_path):
+        """Pre-write validation should skip files that cannot be read."""
+        bad_file = tmp_path / "bad.mp3"
+        original_content = b"this is not a valid mp3 file"
+        bad_file.write_bytes(original_content)
+
+        result = handler.write_tags(str(bad_file), self._make_metadata())
+
+        assert result is False
+        assert bad_file.read_bytes() == original_content  # file unchanged
+
+    def test_restores_original_if_write_corrupts_file(self, handler, tmp_path):
+        """Post-write validation should detect corruption and restore original bytes."""
+        mp3_file = tmp_path / "song.mp3"
+        original_content = b"original bytes"
+        mp3_file.write_bytes(original_content)
+
+        corrupt_content = b"corrupted bytes after bad write"
+
+        def fake_write_mp3(file_path, metadata):
+            Path(file_path).write_bytes(corrupt_content)
+            return True
+
+        # Pre-write read_tags succeeds; post-write read_tags raises (detects corruption)
+        read_calls = [0]
+
+        def fake_read_tags(file_path):
+            read_calls[0] += 1
+            if read_calls[0] > 1:
+                raise Exception("can't sync to MPEG frame")
+            return self._make_metadata()
+
+        with patch.object(handler, "read_tags", side_effect=fake_read_tags), \
+             patch.object(handler, "_write_mp3_tags", side_effect=fake_write_mp3), \
+             pytest.raises(RuntimeError, match="Write corrupted"):
+            handler.write_tags(str(mp3_file), self._make_metadata(),
+                               preserve_existing=False)
+
+        assert mp3_file.read_bytes() == original_content  # restored
+
+    def test_returns_true_on_successful_write(self, handler, tmp_path):
+        """Should return True when write and post-write validation both succeed."""
+        mp3_file = tmp_path / "song.mp3"
+        mp3_file.write_bytes(b"placeholder")
+
+        metadata = self._make_metadata()
+
+        with patch.object(handler, "read_tags", return_value=metadata), \
+             patch.object(handler, "_write_mp3_tags", return_value=True):
+            result = handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
+
+        assert result is True
+
+    def test_post_write_validation_is_performed(self, handler, tmp_path):
+        """read_tags must be called after write to validate the written file."""
+        mp3_file = tmp_path / "song.mp3"
+        mp3_file.write_bytes(b"placeholder")
+        metadata = self._make_metadata()
+
+        read_calls = []
+
+        def tracking_read(file_path):
+            read_calls.append(file_path)
+            return metadata
+
+        with patch.object(handler, "read_tags", side_effect=tracking_read), \
+             patch.object(handler, "_write_mp3_tags", return_value=True):
+            result = handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
+
+        assert result is True
+        assert len(read_calls) == 2, "expected pre-write and post-write read_tags calls"
+        assert all(c == str(mp3_file) for c in read_calls)
+
+    def test_restores_original_on_unexpected_exception(self, handler, tmp_path):
+        """Should restore original bytes if an unexpected exception occurs during write."""
+        mp3_file = tmp_path / "song.mp3"
+        original_content = b"original bytes"
+        mp3_file.write_bytes(original_content)
+
+        metadata = self._make_metadata()
+
+        with patch.object(handler, "read_tags", return_value=metadata), \
+             patch.object(handler, "_write_mp3_tags", side_effect=OSError("disk full")), \
+             pytest.raises(RuntimeError, match="Failed to write tags"):
+            handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
+
+        assert mp3_file.read_bytes() == original_content  # restored
