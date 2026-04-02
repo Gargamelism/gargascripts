@@ -115,7 +115,7 @@ class RcloneSyncManager:
 
     def check_and_release_open_handles(self) -> None:
         """Check for open file handles in local_path and optionally terminate those processes."""
-        local_str = str(self.config.local_path)
+        resolved_local = self.config.local_path.resolve()
         own_pid = os.getpid()
         open_handles: list[tuple[psutil.Process, str]] = []
 
@@ -124,7 +124,11 @@ class RcloneSyncManager:
                 if proc.pid == own_pid or (proc.info["name"] and "rclone" in proc.info["name"].lower()):
                     continue
                 for f in proc.info["open_files"] or []:
-                    if f.path.startswith(local_str):
+                    try:
+                        resolved_file = Path(f.path).resolve()
+                    except (OSError, ValueError):
+                        continue
+                    if resolved_file.is_relative_to(resolved_local):
                         open_handles.append((proc, f.path))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue

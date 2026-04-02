@@ -202,14 +202,24 @@ class ID3Handler:
                 return False
 
             if not ok:
-                path.write_bytes(original_bytes)
+                try:
+                    path.write_bytes(original_bytes)
+                except (OSError, IOError) as restore_err:
+                    raise RuntimeError(
+                        f"Write failed for {path.name} and restore also failed: {restore_err}"
+                    )
                 return False
 
             # Post-write validation: re-read to confirm the file is still valid
             try:
                 self.read_tags(file_path)
             except Exception as e:
-                path.write_bytes(original_bytes)
+                try:
+                    path.write_bytes(original_bytes)
+                except (OSError, IOError) as restore_err:
+                    raise RuntimeError(
+                        f"Write corrupted {path.name} and restore also failed: {restore_err}"
+                    ) from e
                 raise RuntimeError(
                     f"Write corrupted {path.name} — original restored"
                 ) from e
@@ -219,7 +229,12 @@ class ID3Handler:
         except RuntimeError:
             raise
         except Exception as e:
-            path.write_bytes(original_bytes)
+            try:
+                path.write_bytes(original_bytes)
+            except (OSError, IOError) as restore_err:
+                raise RuntimeError(
+                    f"Failed to write tags to {path.name} and restore also failed: {restore_err}"
+                ) from e
             raise RuntimeError(
                 f"Failed to write tags to {path.name} — original restored"
             ) from e
