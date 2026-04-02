@@ -15,3 +15,5 @@ pytest==8.3.*
 # telegram_bots/log_review
 python-dotenv==1.0.*
 requests==2.32.*
+# rclone_sync
+psutil==6.*
