@@ -9,6 +9,7 @@ preferring the newer file. When timestamps are equal, both files are preserved.
 import argparse
 import json
 import logging
+import os
 import re
 import signal
 import subprocess
@@ -17,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+import psutil
 
 
 @dataclass
@@ -34,6 +37,7 @@ class SyncConfig:
     max_retries: int = 3
     retry_delay: int = 30
     rclone_path: str = "/opt/homebrew/bin/rclone"
+    quit_open_handle_procs: bool = True
 
 
 @dataclass
@@ -108,6 +112,59 @@ class RcloneSyncManager:
             for e in errors:
                 self.logger.error(e)
             raise ValueError("Configuration validation failed")
+
+    def check_and_release_open_handles(self) -> None:
+        """Check for open file handles in local_path and optionally terminate those processes."""
+        resolved_local = self.config.local_path.resolve()
+        own_pid = os.getpid()
+        open_handles: list[tuple[psutil.Process, str]] = []
+
+        for proc in psutil.process_iter(["pid", "name", "open_files"]):
+            try:
+                if proc.pid == own_pid or (proc.info["name"] and "rclone" in proc.info["name"].lower()):
+                    continue
+                for f in proc.info["open_files"] or []:
+                    try:
+                        resolved_file = Path(f.path).resolve()
+                    except (OSError, ValueError):
+                        continue
+                    if resolved_file.is_relative_to(resolved_local):
+                        open_handles.append((proc, f.path))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if not open_handles:
+            self.logger.info("No open file handles found in local path")
+            return
+
+        self.logger.warning(f"Found {len(open_handles)} open file handle(s) in {self.config.local_path}:")
+        for proc, filepath in open_handles:
+            self.logger.warning(f"  PID {proc.pid} ({proc.info['name']}): {filepath}")
+
+        if not self.config.quit_open_handle_procs:
+            self.logger.info("Proceeding with sync (use --quit-open-handle-procs to terminate these processes)")
+            return
+
+        procs_to_term: set[psutil.Process] = {proc for proc, _ in open_handles}
+        self.logger.info(
+            f"Sending SIGTERM to {len(procs_to_term)} process(es): "
+            + ", ".join(f"{p.pid} ({p.info['name']})" for p in sorted(procs_to_term, key=lambda p: p.pid))
+        )
+        for proc in procs_to_term:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                self.logger.warning(f"Could not terminate PID {proc.pid}: {e}")
+
+        _, alive = psutil.wait_procs(list(procs_to_term), timeout=5)
+        if alive:
+            for proc in alive:
+                try:
+                    self.logger.warning(f"PID {proc.pid} ({proc.name()}) still alive after SIGTERM — proceeding anyway")
+                except psutil.NoSuchProcess:
+                    pass
+        else:
+            self.logger.info("All processes released file handles successfully")
 
     def _build_remote_path(self, file_path: str) -> str:
         """Build properly formatted remote path."""
@@ -253,6 +310,7 @@ class RcloneSyncManager:
 
     def run_sync_with_retry(self) -> SyncResult:
         """Run bisync with automatic retry on transient failures."""
+        self.check_and_release_open_handles()
         attempt = 0
 
         while True:
@@ -954,6 +1012,12 @@ Examples:
         default="/opt/homebrew/bin/rclone",
         help="Path to rclone binary (default: /opt/homebrew/bin/rclone)",
     )
+    parser.add_argument(
+        "--quit-open-handle-procs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Send SIGTERM to processes holding open handles in the local sync directory before syncing (default: true)",
+    )
 
     return parser.parse_args()
 
@@ -974,6 +1038,7 @@ def main() -> int:
         max_retries=args.max_retries,
         retry_delay=args.retry_delay,
         rclone_path=args.rclone_path,
+        quit_open_handle_procs=args.quit_open_handle_procs,
     )
 
     try:
