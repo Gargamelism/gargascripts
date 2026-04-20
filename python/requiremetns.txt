@@ -1,6 +1,6 @@
 progressbar2==4.5.*
 # debugging
-ipython==8.28.*
+ipython==8.18.*
 # heic_to_jpeg
 pillow==10.4.*
 pillow_heif==0.18.*

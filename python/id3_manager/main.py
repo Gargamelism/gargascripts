@@ -500,11 +500,17 @@ class ID3Processor:
             action = self.prompts.handle_no_discogs_match(acr_result)
 
             if action == "acr_only":
-                af.proposed_tags = TrackMetadata(
+                proposed = TrackMetadata(
                     title=acr_result.title,
                     artist=artist,
                     album=acr_result.album,
                 )
+                proposed = proposed.merge_with(af.current_tags)
+                proposed = self.prompts.prompt_missing_fields(proposed, Path(af.file_path).name)
+                if proposed is None:
+                    self.stats.files_skipped += 1
+                    return None
+                af.proposed_tags = proposed
                 return None
             elif action == "retry":
                 new_artist, new_track = self.prompts.get_modified_search_query(
