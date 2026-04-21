@@ -108,6 +108,16 @@ class DiscogsClient:
             resp.raise_for_status()
             self._update_rate_limit(resp)
             return self._parse_release(resp.json())
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                eprint(
+                    f"Discogs release {release_id} not fetchable (404) — "
+                    f"likely deleted/withdrawn, private, or still in moderation "
+                    f"while search index is stale. Skipping."
+                )
+                return None
+            eprint(f"Discogs release fetch error: {e}")
+            return None
         except requests.exceptions.RequestException as e:
             eprint(f"Discogs release fetch error: {e}")
             return None
