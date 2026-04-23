@@ -30,6 +30,15 @@ def sync(sync_root):
     )
 
 
+@pytest.fixture
+def src_dst(sync_root):
+    """A created source file and a (not yet existing) destination in the sync root."""
+    src = sync_root / "old.mp3"
+    dst = sync_root / "new.mp3"
+    src.touch()
+    return src, dst
+
+
 class TestSyncRoot:
     def test_is_in_sync_root_true_for_child(self, sync, sync_root):
         child = sync_root / "Music" / "Album"
@@ -81,10 +90,8 @@ class TestMoveto:
         assert ok is True
         assert "identical" in msg
 
-    def test_runs_rclone_moveto_on_success(self, sync, sync_root):
-        src = sync_root / "old.mp3"
-        dst = sync_root / "new.mp3"
-        src.touch()
+    def test_runs_rclone_moveto_on_success(self, sync, src_dst):
+        src, dst = src_dst
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             ok, msg = sync.moveto(src, dst)
@@ -97,19 +104,15 @@ class TestMoveto:
         assert cmd[3] == "onedrive:new.mp3"
         assert "--dry-run" not in cmd
 
-    def test_appends_dry_run_flag(self, sync, sync_root):
-        src = sync_root / "old.mp3"
-        dst = sync_root / "new.mp3"
-        src.touch()
+    def test_appends_dry_run_flag(self, sync, src_dst):
+        src, dst = src_dst
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             sync.moveto(src, dst, dry_run=True)
         assert "--dry-run" in run.call_args.args[0]
 
-    def test_returns_failure_on_nonzero_exit(self, sync, sync_root):
-        src = sync_root / "old.mp3"
-        dst = sync_root / "new.mp3"
-        src.touch()
+    def test_returns_failure_on_nonzero_exit(self, sync, src_dst):
+        src, dst = src_dst
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=3, stdout="", stderr="directory not found")
             ok, msg = sync.moveto(src, dst)
@@ -117,19 +120,15 @@ class TestMoveto:
         assert "exit 3" in msg
         assert "directory not found" in msg
 
-    def test_handles_timeout(self, sync, sync_root):
-        src = sync_root / "old.mp3"
-        dst = sync_root / "new.mp3"
-        src.touch()
+    def test_handles_timeout(self, sync, src_dst):
+        src, dst = src_dst
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="", timeout=1)):
             ok, msg = sync.moveto(src, dst)
         assert ok is False
         assert "timed out" in msg
 
-    def test_handles_missing_binary(self, sync, sync_root):
-        src = sync_root / "old.mp3"
-        dst = sync_root / "new.mp3"
-        src.touch()
+    def test_handles_missing_binary(self, sync, src_dst):
+        src, dst = src_dst
         with patch("subprocess.run", side_effect=FileNotFoundError):
             ok, msg = sync.moveto(src, dst)
         assert ok is False

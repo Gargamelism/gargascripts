@@ -8,10 +8,15 @@ both sides with nothing to do.
 """
 
 import shlex
+import shutil
 import subprocess
 import unicodedata
 from pathlib import Path
-from typing import Tuple
+from typing import Callable, Optional, Tuple
+
+
+def _default_log(msg: str) -> None:
+    print(msg, flush=True)
 
 
 class OneDriveSync:
@@ -21,13 +26,17 @@ class OneDriveSync:
         self,
         local_root: Path,
         remote: str = "onedrive:",
-        rclone_path: str = "/opt/homebrew/bin/rclone",
+        rclone_path: Optional[str] = None,
         timeout: int = 120,
+        log: Callable[[str], None] = _default_log,
     ):
-        self.local_root = local_root.resolve()
+        # strict=True surfaces a missing sync root immediately instead of letting
+        # every moveto() call fail later with a cryptic relative_to ValueError.
+        self.local_root = local_root.resolve(strict=True)
         self.remote = remote if remote.endswith(":") else f"{remote}:"
-        self.rclone_path = rclone_path
+        self.rclone_path = rclone_path or shutil.which("rclone") or "/opt/homebrew/bin/rclone"
         self.timeout = timeout
+        self.log = log
 
     def is_in_sync_root(self, local_path: Path) -> bool:
         """True if local_path is under the configured sync root."""
@@ -73,7 +82,7 @@ class OneDriveSync:
             cmd.append("--dry-run")
 
         prefix = "[onedrive dry-run]" if dry_run else "[onedrive]"
-        print(f"    {prefix} {remote_src} -> {remote_dst}", flush=True)
+        self.log(f"    {prefix} {remote_src} -> {remote_dst}")
 
         try:
             result = subprocess.run(
@@ -83,6 +92,7 @@ class OneDriveSync:
                 timeout=self.timeout,
             )
         except subprocess.TimeoutExpired:
+            # shlex.join here is only for the human-readable error message.
             return False, f"rclone moveto timed out after {self.timeout}s: {shlex.join(cmd)}"
         except FileNotFoundError:
             return False, f"rclone binary not found at {self.rclone_path}"

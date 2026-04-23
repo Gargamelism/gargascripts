@@ -18,12 +18,12 @@ def folder_manager():
     return FolderManager()
 
 
-class TestSanitizeFilename:
-    """Tests for _sanitize_filename method."""
+class TestSanitizeName:
+    """Tests for _sanitize_name method."""
 
     def test_replaces_invalid_characters(self, folder_manager):
         """Should replace <, >, :, \", /, \\, |, ?, * with underscore."""
-        result = folder_manager._sanitize_filename('Test<>:"/\\|?*Name')
+        result = folder_manager._sanitize_name('Test<>:"/\\|?*Name')
         assert "<" not in result
         assert ">" not in result
         assert ":" not in result
@@ -36,19 +36,19 @@ class TestSanitizeFilename:
 
     def test_strips_leading_trailing_dots_and_spaces(self, folder_manager):
         """Should remove leading/trailing dots and spaces."""
-        assert folder_manager._sanitize_filename("  Test  ") == "Test"
-        assert folder_manager._sanitize_filename("...Test...") == "Test"
-        assert folder_manager._sanitize_filename(". Test .") == "Test"
+        assert folder_manager._sanitize_name("  Test  ") == "Test"
+        assert folder_manager._sanitize_name("...Test...") == "Test"
+        assert folder_manager._sanitize_name(". Test .") == "Test"
 
     def test_collapses_multiple_spaces(self, folder_manager):
         """Should collapse multiple spaces into one."""
-        result = folder_manager._sanitize_filename("Test    Multiple   Spaces")
+        result = folder_manager._sanitize_name("Test    Multiple   Spaces")
         assert "  " not in result
         assert result == "Test Multiple Spaces"
 
     def test_collapses_multiple_underscores(self, folder_manager):
         """Should collapse multiple underscores into space."""
-        result = folder_manager._sanitize_filename("Test___Name")
+        result = folder_manager._sanitize_name("Test___Name")
         assert "___" not in result
 
 

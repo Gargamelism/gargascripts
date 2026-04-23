@@ -968,9 +968,9 @@ Examples:
 
     parser.add_argument(
         "--onedrive-root",
-        default="/Volumes/data_2/onedrive",
-        help="Local root of the OneDrive sync (default: /Volumes/data_2/onedrive). "
-             "Renames outside this root are not mirrored."
+        default=None,
+        help="Local root of the OneDrive sync. Required when --mirror-onedrive "
+             "is set. Renames outside this root are not mirrored."
     )
 
     parser.add_argument(
@@ -981,8 +981,9 @@ Examples:
 
     parser.add_argument(
         "--rclone-path",
-        default="/opt/homebrew/bin/rclone",
-        help="Path to the rclone binary (default: /opt/homebrew/bin/rclone)"
+        default=None,
+        help="Path to the rclone binary (default: auto-detect via PATH, "
+             "falling back to /opt/homebrew/bin/rclone)"
     )
 
     # Configuration
@@ -1029,6 +1030,8 @@ def main():
     # Validate --onedrive-root when mirroring is requested so misconfiguration
     # fails loudly instead of silently no-op'ing every mirror call.
     if args.mirror_onedrive:
+        if not args.onedrive_root:
+            parser.error("--onedrive-root is required when --mirror-onedrive is set")
         onedrive_root = Path(args.onedrive_root)
         if not onedrive_root.exists():
             parser.error(f"OneDrive root does not exist: {args.onedrive_root}")

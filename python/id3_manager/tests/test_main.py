@@ -44,9 +44,9 @@ def mock_args():
         no_color=True,
         quiet=True,
         mirror_onedrive=False,
-        onedrive_root="/Volumes/data_2/onedrive",
+        onedrive_root=None,
         onedrive_remote="onedrive:",
-        rclone_path="/opt/homebrew/bin/rclone",
+        rclone_path=None,
     )
 
 
