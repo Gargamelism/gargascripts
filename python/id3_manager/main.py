@@ -26,6 +26,7 @@ from discogs_client import DiscogsClient
 from id3_handler import ID3Handler
 from folder_manager import FolderManager
 from interactive import InteractivePrompts
+from onedrive_sync import OneDriveSync
 
 
 class ID3Processor:
@@ -48,7 +49,15 @@ class ID3Processor:
 
         # Initialize clients
         self.id3_handler = ID3Handler()
-        self.folder_manager = FolderManager()
+
+        onedrive_sync = None
+        if args.mirror_onedrive:
+            onedrive_sync = OneDriveSync(
+                local_root=Path(args.onedrive_root),
+                remote=args.onedrive_remote,
+                rclone_path=args.rclone_path,
+            )
+        self.folder_manager = FolderManager(onedrive_sync=onedrive_sync)
 
         self.acr_client = None
         if not args.skip_acr and config.get("acrcloud_host"):
@@ -949,6 +958,34 @@ Examples:
         help="Skip file renaming step"
     )
 
+    # OneDrive mirroring (keeps bisync in lockstep with local renames)
+    parser.add_argument(
+        "--mirror-onedrive",
+        action="store_true",
+        help="Mirror every local rename/move to OneDrive via rclone server-side "
+             "moves, so rclone bisync sees matching names on both sides."
+    )
+
+    parser.add_argument(
+        "--onedrive-root",
+        default=None,
+        help="Local root of the OneDrive sync. Required when --mirror-onedrive "
+             "is set. Renames outside this root are not mirrored."
+    )
+
+    parser.add_argument(
+        "--onedrive-remote",
+        default="onedrive:",
+        help="rclone remote for OneDrive (default: onedrive:)"
+    )
+
+    parser.add_argument(
+        "--rclone-path",
+        default=None,
+        help="Path to the rclone binary (default: auto-detect via PATH, "
+             "falling back to /opt/homebrew/bin/rclone)"
+    )
+
     # Configuration
     parser.add_argument(
         "--env-file",
@@ -989,6 +1026,17 @@ def main():
             parser.error(f"Start folder does not exist: {args.start_at}")
         elif not os.path.isdir(args.start_at):
             parser.error(f"Start path is not a folder: {args.start_at}")
+
+    # Validate --onedrive-root when mirroring is requested so misconfiguration
+    # fails loudly instead of silently no-op'ing every mirror call.
+    if args.mirror_onedrive:
+        if not args.onedrive_root:
+            parser.error("--onedrive-root is required when --mirror-onedrive is set")
+        onedrive_root = Path(args.onedrive_root)
+        if not onedrive_root.exists():
+            parser.error(f"OneDrive root does not exist: {args.onedrive_root}")
+        elif not onedrive_root.is_dir():
+            parser.error(f"OneDrive root is not a directory: {args.onedrive_root}")
 
     # --rename-only implies skipping all lookups
     if args.rename_only:
