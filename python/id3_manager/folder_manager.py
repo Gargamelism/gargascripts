@@ -3,11 +3,13 @@
 import os
 import re
 import shutil
+import unicodedata
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from config import eprint
 from models import AlbumFolder, AudioFile
+from onedrive_sync import OneDriveSync
 
 
 class FolderManager:
@@ -22,6 +24,23 @@ class FolderManager:
 
     # Pattern for properly formatted album folder
     ALBUM_FOLDER_PATTERN = r"^(\d{4})\s*-\s*(.+)$"
+
+    def __init__(self, onedrive_sync: Optional[OneDriveSync] = None):
+        """
+        Args:
+            onedrive_sync: Optional OneDriveSync to mirror local renames to OneDrive
+                via server-side rclone moves. When set, every rename/move is applied
+                to the remote first; local commits only on remote success.
+        """
+        self.onedrive_sync = onedrive_sync
+
+    def _mirror_rename(
+        self, local_src: Path, local_dst: Path, dry_run: bool
+    ) -> Tuple[bool, str]:
+        """Mirror a rename to OneDrive. No-op when no sync is configured."""
+        if self.onedrive_sync is None:
+            return True, ""
+        return self.onedrive_sync.moveto(local_src, local_dst, dry_run=dry_run)
 
     def detect_multi_disc_structure(self, folder_path: str) -> List[AlbumFolder]:
         """
@@ -111,6 +130,10 @@ class FolderManager:
         if new_path.exists():
             return False, f"Target folder already exists: {new_path}"
 
+        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
+        if not mirror_ok:
+            return False, f"Remote rename failed: {mirror_msg}"
+
         if dry_run:
             return True, f"Would rename '{current.name}' to '{expected_name}'"
 
@@ -118,6 +141,7 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
+            self._mirror_rename(new_path, current, dry_run=False)
             return False, str(e)
 
     def detect_multi_disc_from_metadata(self,
@@ -175,7 +199,8 @@ class FolderManager:
         name = name.strip(". ")
         # Collapse multiple spaces/underscores
         name = re.sub(r"[_\s]+", " ", name)
-        return name
+        # NFC-normalize so OneDrive (NFC) and macOS (often NFD) agree
+        return unicodedata.normalize("NFC", name)
 
     def is_folder_properly_named(self, folder_path: str) -> bool:
         """
@@ -228,6 +253,10 @@ class FolderManager:
         if current.name == new_name:
             return True, "Folder already has correct name"
 
+        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
+        if not mirror_ok:
+            return False, f"Remote rename failed: {mirror_msg}"
+
         if dry_run:
             return True, f"Would rename to: {new_path}"
 
@@ -235,6 +264,7 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
+            self._mirror_rename(new_path, current, dry_run=False)
             return False, str(e)
 
     def create_multi_disc_structure(self, source_folder: str, year: int,
@@ -296,6 +326,9 @@ class FolderManager:
         target = Path(disc_folder) / source.name
 
         if dry_run:
+            mirror_ok, mirror_msg = self._mirror_rename(source, target, dry_run=True)
+            if not mirror_ok:
+                return False, f"Remote move failed: {mirror_msg}"
             return True, f"Would move to: {target}"
 
         if not source.exists():
@@ -304,10 +337,15 @@ class FolderManager:
         if target.exists():
             return False, f"Target already exists: {target}"
 
+        mirror_ok, mirror_msg = self._mirror_rename(source, target, dry_run=False)
+        if not mirror_ok:
+            return False, f"Remote move failed: {mirror_msg}"
+
         try:
             shutil.move(str(source), str(target))
             return True, str(target)
         except Exception as e:
+            self._mirror_rename(target, source, dry_run=False)
             return False, str(e)
 
     def reorganize_multi_disc_album(self, folder_path: str,
@@ -414,7 +452,8 @@ class FolderManager:
         name = name.strip(". ")
         # Collapse multiple spaces/underscores
         name = re.sub(r"[_\s]+", " ", name)
-        return name
+        # NFC-normalize so OneDrive (NFC) and macOS (often NFD) agree
+        return unicodedata.normalize("NFC", name)
 
     def generate_filename(self, metadata, extension: str) -> Optional[str]:
         """
@@ -490,6 +529,10 @@ class FolderManager:
         if current.name == new_name:
             return True, "File already has correct name"
 
+        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
+        if not mirror_ok:
+            return False, f"Remote rename failed: {mirror_msg}"
+
         if dry_run:
             return True, f"Would rename to: {new_name}"
 
@@ -497,4 +540,5 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
+            self._mirror_rename(new_path, current, dry_run=False)
             return False, str(e)

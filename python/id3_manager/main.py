@@ -26,6 +26,7 @@ from discogs_client import DiscogsClient
 from id3_handler import ID3Handler
 from folder_manager import FolderManager
 from interactive import InteractivePrompts
+from onedrive_sync import OneDriveSync
 
 
 class ID3Processor:
@@ -48,7 +49,15 @@ class ID3Processor:
 
         # Initialize clients
         self.id3_handler = ID3Handler()
-        self.folder_manager = FolderManager()
+
+        onedrive_sync = None
+        if args.mirror_onedrive:
+            onedrive_sync = OneDriveSync(
+                local_root=Path(args.onedrive_root),
+                remote=args.onedrive_remote,
+                rclone_path=args.rclone_path,
+            )
+        self.folder_manager = FolderManager(onedrive_sync=onedrive_sync)
 
         self.acr_client = None
         if not args.skip_acr and config.get("acrcloud_host"):
@@ -947,6 +956,33 @@ Examples:
         "--no-file-rename",
         action="store_true",
         help="Skip file renaming step"
+    )
+
+    # OneDrive mirroring (keeps bisync in lockstep with local renames)
+    parser.add_argument(
+        "--mirror-onedrive",
+        action="store_true",
+        help="Mirror every local rename/move to OneDrive via rclone server-side "
+             "moves, so rclone bisync sees matching names on both sides."
+    )
+
+    parser.add_argument(
+        "--onedrive-root",
+        default="/Volumes/data_2/onedrive",
+        help="Local root of the OneDrive sync (default: /Volumes/data_2/onedrive). "
+             "Renames outside this root are not mirrored."
+    )
+
+    parser.add_argument(
+        "--onedrive-remote",
+        default="onedrive:",
+        help="rclone remote for OneDrive (default: onedrive:)"
+    )
+
+    parser.add_argument(
+        "--rclone-path",
+        default="/opt/homebrew/bin/rclone",
+        help="Path to the rclone binary (default: /opt/homebrew/bin/rclone)"
     )
 
     # Configuration

@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -461,3 +462,120 @@ class TestNormalizeDiscFolderName:
         )
         assert success is True
         assert "'CD3'" in msg
+
+
+class TestOneDriveMirroring:
+    """Rename/move operations mirror to OneDrive before committing locally."""
+
+    def _mock_sync(self, success: bool = True, message: str = "ok"):
+        sync = MagicMock()
+        sync.moveto.return_value = (success, message)
+        return sync
+
+    def test_rename_audio_file_mirrors_before_local(self, tmp_path):
+        """Remote moveto is called, then local rename happens."""
+        mp3 = tmp_path / "old.mp3"
+        mp3.write_bytes(b"fake")
+        sync = self._mock_sync()
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, result = fm.rename_audio_file(str(mp3), "new.mp3")
+
+        assert ok is True
+        sync.moveto.assert_called_once()
+        src_arg, dst_arg = sync.moveto.call_args.args
+        assert Path(src_arg).name == "old.mp3"
+        assert Path(dst_arg).name == "new.mp3"
+        assert (tmp_path / "new.mp3").exists()
+        assert not mp3.exists()
+
+    def test_rename_audio_file_aborts_on_remote_failure(self, tmp_path):
+        """If remote fails, local file is untouched."""
+        mp3 = tmp_path / "old.mp3"
+        mp3.write_bytes(b"fake")
+        sync = self._mock_sync(success=False, message="401 unauthorized")
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, result = fm.rename_audio_file(str(mp3), "new.mp3")
+
+        assert ok is False
+        assert "Remote rename failed" in result
+        assert "401" in result
+        assert mp3.exists()
+        assert not (tmp_path / "new.mp3").exists()
+
+    def test_rename_audio_file_dry_run_passes_dry_run_flag(self, tmp_path):
+        mp3 = tmp_path / "old.mp3"
+        mp3.write_bytes(b"fake")
+        sync = self._mock_sync()
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, _ = fm.rename_audio_file(str(mp3), "new.mp3", dry_run=True)
+
+        assert ok is True
+        assert sync.moveto.call_args.kwargs.get("dry_run") is True
+        assert mp3.exists()  # dry run: local unchanged
+
+    def test_rename_folder_mirrors_before_local(self, tmp_path):
+        folder = tmp_path / "Old Name"
+        folder.mkdir()
+        sync = self._mock_sync()
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, _ = fm.rename_folder(str(folder), "New Name")
+
+        assert ok is True
+        sync.moveto.assert_called_once()
+        assert (tmp_path / "New Name").is_dir()
+        assert not folder.exists()
+
+    def test_rename_folder_aborts_on_remote_failure(self, tmp_path):
+        folder = tmp_path / "Old Name"
+        folder.mkdir()
+        sync = self._mock_sync(success=False, message="throttled")
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, result = fm.rename_folder(str(folder), "New Name")
+
+        assert ok is False
+        assert "Remote rename failed" in result
+        assert folder.exists()
+        assert not (tmp_path / "New Name").exists()
+
+    def test_normalize_disc_folder_mirrors(self, tmp_path):
+        disc = tmp_path / "cd 1"
+        disc.mkdir()
+        sync = self._mock_sync()
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, _ = fm.normalize_disc_folder_name(str(disc), 1)
+
+        assert ok is True
+        sync.moveto.assert_called_once()
+        assert (tmp_path / "CD1").is_dir()
+
+    def test_move_file_to_disc_folder_mirrors(self, tmp_path):
+        mp3 = tmp_path / "song.mp3"
+        mp3.write_bytes(b"fake")
+        disc = tmp_path / "CD1"
+        disc.mkdir()
+        sync = self._mock_sync()
+        fm = FolderManager(onedrive_sync=sync)
+
+        ok, _ = fm.move_file_to_disc_folder(str(mp3), str(disc))
+
+        assert ok is True
+        sync.moveto.assert_called_once()
+        assert (disc / "song.mp3").exists()
+        assert not mp3.exists()
+
+    def test_no_mirror_calls_when_sync_disabled(self, tmp_path):
+        """Default FolderManager() with no sync never touches the network."""
+        mp3 = tmp_path / "old.mp3"
+        mp3.write_bytes(b"fake")
+        fm = FolderManager()  # no onedrive_sync
+
+        ok, _ = fm.rename_audio_file(str(mp3), "new.mp3")
+
+        assert ok is True
+        assert (tmp_path / "new.mp3").exists()
