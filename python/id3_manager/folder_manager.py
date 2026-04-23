@@ -141,7 +141,14 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
-            self._mirror_rename(new_path, current, dry_run=False)
+            rollback_ok, rollback_msg = self._mirror_rename(new_path, current, dry_run=False)
+            if not rollback_ok:
+                eprint(
+                    f"WARNING: remote rollback FAILED after local rename error — "
+                    f"local and remote trees are out of sync. "
+                    f"Local error: {e}. Rollback error: {rollback_msg}"
+                )
+                return False, f"local error: {e}; remote rollback failed: {rollback_msg}"
             return False, str(e)
 
     def detect_multi_disc_from_metadata(self,
@@ -264,7 +271,14 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
-            self._mirror_rename(new_path, current, dry_run=False)
+            rollback_ok, rollback_msg = self._mirror_rename(new_path, current, dry_run=False)
+            if not rollback_ok:
+                eprint(
+                    f"WARNING: remote rollback FAILED after local rename error — "
+                    f"local and remote trees are out of sync. "
+                    f"Local error: {e}. Rollback error: {rollback_msg}"
+                )
+                return False, f"local error: {e}; remote rollback failed: {rollback_msg}"
             return False, str(e)
 
     def create_multi_disc_structure(self, source_folder: str, year: int,
@@ -345,7 +359,14 @@ class FolderManager:
             shutil.move(str(source), str(target))
             return True, str(target)
         except Exception as e:
-            self._mirror_rename(target, source, dry_run=False)
+            rollback_ok, rollback_msg = self._mirror_rename(target, source, dry_run=False)
+            if not rollback_ok:
+                eprint(
+                    f"WARNING: remote rollback FAILED after local move error — "
+                    f"local and remote trees are out of sync. "
+                    f"Local error: {e}. Rollback error: {rollback_msg}"
+                )
+                return False, f"local error: {e}; remote rollback failed: {rollback_msg}"
             return False, str(e)
 
     def reorganize_multi_disc_album(self, folder_path: str,
@@ -540,5 +561,12 @@ class FolderManager:
             current.rename(new_path)
             return True, str(new_path)
         except OSError as e:
-            self._mirror_rename(new_path, current, dry_run=False)
+            rollback_ok, rollback_msg = self._mirror_rename(new_path, current, dry_run=False)
+            if not rollback_ok:
+                eprint(
+                    f"WARNING: remote rollback FAILED after local rename error — "
+                    f"local and remote trees are out of sync. "
+                    f"Local error: {e}. Rollback error: {rollback_msg}"
+                )
+                return False, f"local error: {e}; remote rollback failed: {rollback_msg}"
             return False, str(e)

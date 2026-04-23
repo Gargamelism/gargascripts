@@ -1026,6 +1026,15 @@ def main():
         elif not os.path.isdir(args.start_at):
             parser.error(f"Start path is not a folder: {args.start_at}")
 
+    # Validate --onedrive-root when mirroring is requested so misconfiguration
+    # fails loudly instead of silently no-op'ing every mirror call.
+    if args.mirror_onedrive:
+        onedrive_root = Path(args.onedrive_root)
+        if not onedrive_root.exists():
+            parser.error(f"OneDrive root does not exist: {args.onedrive_root}")
+        elif not onedrive_root.is_dir():
+            parser.error(f"OneDrive root is not a directory: {args.onedrive_root}")
+
     # --rename-only implies skipping all lookups
     if args.rename_only:
         args.skip_acr = True

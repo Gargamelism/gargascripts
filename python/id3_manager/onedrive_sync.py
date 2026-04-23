@@ -59,6 +59,9 @@ class OneDriveSync:
         if not self.is_in_sync_root(local_src):
             return True, "skipped: source outside sync root"
 
+        if not self.is_in_sync_root(local_dst):
+            return True, "skipped: destination outside sync root"
+
         remote_src = self._to_remote(local_src)
         remote_dst = self._to_remote(local_dst)
 

@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -53,13 +54,17 @@ class TestToRemote:
         assert sync._to_remote(local) == "onedrive:Music/Artist/Song.mp3"
 
     def test_nfc_normalizes_remote_path(self, sync, sync_root):
-        # "é" as NFD (e + combining acute) should become NFC before sending
-        nfd_name = "Café"  # "Café" in NFD
+        # Construct NFD explicitly so this test cannot be defeated by an
+        # editor silently re-normalizing the source to NFC. NFD "Café" is
+        # 5 codepoints (C, a, f, e, U+0301); NFC is 4 (C, a, f, U+00E9).
+        nfd_name = unicodedata.normalize("NFD", "Café")
+        nfc_name = unicodedata.normalize("NFC", "Café")
+        assert nfd_name != nfc_name  # sanity: the two forms really do differ
         local = sync_root / nfd_name / "Song.mp3"
         local.parent.mkdir()
         local.touch()
         remote = sync._to_remote(local)
-        assert remote == "onedrive:Café/Song.mp3"  # NFC composed form
+        assert remote == "onedrive:" + nfc_name + "/Song.mp3"
 
 
 class TestMoveto:
