@@ -102,3 +102,65 @@ class OneDriveSync:
 
         stderr = (result.stderr or result.stdout).strip()
         return False, f"rclone exit {result.returncode}: {stderr}"
+
+    def copyto(
+        self,
+        local_path: Path,
+        dry_run: bool = False,
+        timeout: Optional[int] = None,
+    ) -> Tuple[bool, str]:
+        """Push local content to its matching remote path via `rclone copyto`.
+
+        Used after an in-place ID3 write so the remote `quickXorHash` and mtime
+        match the freshly-edited local file. Without this, the next bisync
+        sees mismatched checksums and emits `quickxor differ`.
+
+        --checksum makes rclone skip the upload when content already matches
+        (e.g. when preserve_existing left the file byte-identical). --metadata
+        carries local mtime to the remote so bisync's mtime+size check stays
+        clean — without it OneDrive stamps "now" and the next bisync sees a
+        fresh mtime conflict.
+        """
+        if not self.is_in_sync_root(local_path):
+            return True, "skipped: outside sync root"
+
+        if not local_path.exists():
+            return False, f"local file missing: {local_path}"
+
+        remote_dst = self._to_remote(local_path)
+
+        cmd = [
+            self.rclone_path,
+            "copyto",
+            str(local_path),
+            remote_dst,
+            "--checksum",
+            "--metadata",
+        ]
+        if dry_run:
+            cmd.append("--dry-run")
+
+        prefix = "[onedrive dry-run]" if dry_run else "[onedrive]"
+        self.log(f"    {prefix} copyto {local_path} -> {remote_dst}")
+
+        # Large files over a slow link can exceed the moveto default; give
+        # copyto a longer fallback so we don't time out on multi-MB FLACs.
+        effective_timeout = timeout if timeout is not None else self.timeout * 5
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=effective_timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return False, f"rclone copyto timed out after {effective_timeout}s: {shlex.join(cmd)}"
+        except FileNotFoundError:
+            return False, f"rclone binary not found at {self.rclone_path}"
+
+        if result.returncode == 0:
+            return True, f"pushed {local_path} -> {remote_dst}"
+
+        stderr = (result.stderr or result.stdout).strip()
+        return False, f"rclone exit {result.returncode}: {stderr}"

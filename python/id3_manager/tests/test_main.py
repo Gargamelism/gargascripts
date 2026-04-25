@@ -384,6 +384,7 @@ class TestApplyTagChanges:
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=False)
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
+        processor.folder_manager.onedrive_sync = None
 
         af = AudioFile(
             file_path="/test/song.mp3",
@@ -456,6 +457,7 @@ class TestHandleFileRenames:
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=False)
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
+        processor.folder_manager.onedrive_sync = None
 
         af = AudioFile(
             file_path="/test/Artist - Album - 01 - Song.mp3",

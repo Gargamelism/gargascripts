@@ -1,0 +1,44 @@
+import argparse
+import os
+from pydub import AudioSegment
+from progressbar import ProgressBar
+
+from helpers import change_extension
+
+
+def get_relevant_files(base_path, filter_cb):
+    relevant_files = []
+    for root, dirs, files in os.walk(base_path):
+        relevant_files.extend([os.path.join(root, file) for file in files if filter_cb(file)])
+
+    return relevant_files
+
+
+def wav_to_mp3(file_path):
+    if file_path.endswith(".wav"):
+        print(f"converting {file_path} to mp3")
+        try:
+            wav_audio = AudioSegment.from_file(file_path, "wav")
+            mp3_name = change_extension(file_path, ".mp3")
+            wav_audio.export(mp3_name, format="mp3", parameters=["-qscale:a", "0"])
+        except Exception as e:
+            print(f"Error converting {file_path} to mp3: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="calculate duration times in given file")
+    parser.add_argument("base_path")
+    args = parser.parse_args()
+
+    relevant_files = get_relevant_files(args.base_path, lambda x: x.endswith(".wav"))
+    progress_bar = ProgressBar(max_value=len(relevant_files))
+    for file in relevant_files:
+        wav_to_mp3(file)
+        progress_bar.increment()
+    progress_bar.finish()
+
+    print("done!")
+
+
+if __name__ == "__main__":
+    main()

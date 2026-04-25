@@ -694,6 +694,7 @@ class ID3Processor:
     def _apply_tag_changes(self, audio_files: List[AudioFile]) -> None:
         """Apply proposed tag changes to files."""
         write_failed = False
+        tagged_files: List[AudioFile] = []
         for af in audio_files:
             if af.proposed_tags:
                 if self.args.dry_run:
@@ -711,12 +712,38 @@ class ID3Processor:
                     if success:
                         self.stats.tags_updated += 1
                         self.prompts.print(f"  Updated: {Path(af.file_path).name}")
+                        tagged_files.append(af)
                     else:
                         self.stats.errors.append(f"Failed to write tags: {af.file_path}")
+
+        # Push fresh content to OneDrive BEFORE renames. The subsequent
+        # rclone moveto inside _handle_file_renames will then carry the
+        # updated content to the new remote path; without this push, moveto
+        # only renames and the OLD content stays at the new path, producing
+        # `quickxor differ` warnings on the next bisync.
+        if tagged_files and not self.args.dry_run:
+            self._push_tag_writes_to_onedrive(tagged_files)
 
         # Handle file renaming (unless disabled or a write failed)
         if not write_failed and not self.args.no_file_rename:
             self._handle_file_renames(audio_files)
+
+    def _push_tag_writes_to_onedrive(self, files: List[AudioFile]) -> None:
+        """Push freshly tag-edited files to OneDrive via rclone copyto."""
+        onedrive = self.folder_manager.onedrive_sync
+        if onedrive is None:
+            return
+        for af in files:
+            ok, msg = onedrive.copyto(Path(af.file_path), dry_run=self.args.dry_run)
+            if not ok:
+                self.stats.errors.append(
+                    f"OneDrive push failed for {af.file_path}: {msg}"
+                )
+                self.prompts.print(
+                    f"  OneDrive push failed: {Path(af.file_path).name} - {msg}"
+                )
+            elif not msg.startswith("skipped"):
+                self.prompts.print(f"  Pushed: {Path(af.file_path).name}")
 
     def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:
         """Fill in disc info from folder structure for files where it is missing."""
