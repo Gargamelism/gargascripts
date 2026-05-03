@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import ID3Processor, build_parser
 from models import AudioFile, TrackMetadata, TagStatus, DiscogsRelease, DiscogsTrack
+from sync_results import CommitResult
 
 
 @pytest.fixture
@@ -855,7 +856,7 @@ class TestRenameOnly:
         processor.folder_manager.detect_multi_disc_structure = Mock(return_value=[])
         processor.folder_manager.should_rename_file = Mock(return_value=True)
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
         processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
@@ -897,7 +898,7 @@ class TestRenameOnly:
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=True)
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         with patch('main.ID3Handler.is_supported', return_value=True):
@@ -924,7 +925,7 @@ class TestFilesOnlyNeedingRename:
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=True)
         processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=(True, "/new/path.mp3"))
+        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         # File has complete tags but wrong filename

@@ -10,6 +10,7 @@ from typing import Callable, List, Optional, Tuple
 from config import eprint
 from models import AlbumFolder, AudioFile
 from onedrive_sync import OneDriveSync
+from sync_results import CommitResult, MoveResult
 
 
 class FolderManager:
@@ -35,36 +36,64 @@ class FolderManager:
         self.onedrive_sync = onedrive_sync
 
     def _mirror_rename(
-        self, local_src: Path, local_dst: Path, dry_run: bool
-    ) -> Tuple[bool, str]:
+        self,
+        local_src: Path,
+        local_dst: Path,
+        dry_run: bool,
+        *,
+        allow_recovery: bool = True,
+    ) -> MoveResult:
         """Mirror a rename to OneDrive. No-op when no sync is configured."""
         if self.onedrive_sync is None:
-            return True, ""
-        return self.onedrive_sync.moveto(local_src, local_dst, dry_run=dry_run)
+            return MoveResult(success=True, message="", mode="skipped")
+        return self.onedrive_sync.moveto(
+            local_src, local_dst, dry_run=dry_run, allow_recovery=allow_recovery
+        )
 
     def _commit_with_rollback(
         self,
         local_src: Path,
         local_dst: Path,
         commit_fn: Callable[[], None],
-    ) -> Tuple[bool, str]:
+        *,
+        mirror_result: MoveResult,
+    ) -> CommitResult:
         """Run a local commit after a successful remote mirror, rolling the remote
         back if the local operation raises. Invariant: remote and local stay in
         sync — if local fails, the remote rename is reversed before we return.
+
+        `mirror_result` is the MoveResult from the forward _mirror_rename; its `mode` controls
+        whether rollback is attempted (only "moveto" is rollback-safe).
         """
         try:
             commit_fn()
-            return True, str(local_dst)
+            return CommitResult(success=True, message=str(local_dst))
         except Exception as e:
-            rollback_ok, rollback_msg = self._mirror_rename(local_dst, local_src, dry_run=False)
-            if not rollback_ok:
+            if mirror_result.mode == "recovered":
+                if self.onedrive_sync is not None:
+                    self.onedrive_sync.log(
+                        f"[onedrive] WARNING: local commit failed after recovered rename "
+                        f"({local_src.name} -> {local_dst.name}); remote at NEW path, "
+                        f"local at OLD path. Next bisync will reconcile by downloading the NEW name."
+                    )
+                return CommitResult(
+                    success=False,
+                    message=f"{e} (remote already recovered to NEW name; not rolled back)",
+                )
+            rollback = self._mirror_rename(
+                local_dst, local_src, dry_run=False, allow_recovery=False
+            )
+            if not rollback.success:
                 eprint(
                     f"WARNING: remote rollback FAILED after local commit error — "
                     f"local and remote trees are out of sync. "
-                    f"Local error: {e}. Rollback error: {rollback_msg}"
+                    f"Local error: {e}. Rollback error: {rollback.message}"
                 )
-                return False, f"local error: {e}; remote rollback failed: {rollback_msg}"
-            return False, str(e)
+                return CommitResult(
+                    success=False,
+                    message=f"local error: {e}; remote rollback failed: {rollback.message}",
+                )
+            return CommitResult(success=False, message=str(e))
 
     def detect_multi_disc_structure(self, folder_path: str) -> List[AlbumFolder]:
         """
@@ -131,7 +160,7 @@ class FolderManager:
         return (disc_num, sibling_disc_count) if sibling_disc_count >= 2 else None
 
     def normalize_disc_folder_name(self, folder_path: str, disc_number: int,
-                                   dry_run: bool = False) -> Tuple[bool, str]:
+                                   dry_run: bool = False) -> CommitResult:
         """
         Normalize disc folder name to standard CD{N} format.
 
@@ -141,27 +170,31 @@ class FolderManager:
             dry_run: If True, don't actually rename
 
         Returns:
-            (success, new_path or message)
+            CommitResult — `message` is the new path on success, an error otherwise.
         """
         current = Path(folder_path)
         expected_name = self.generate_disc_folder_name(disc_number)
 
         if current.name == expected_name:
-            return True, folder_path  # Already correct
+            return CommitResult(success=True, message=folder_path)  # Already correct
 
         new_path = current.parent / expected_name
 
         if new_path.exists():
-            return False, f"Target folder already exists: {new_path}"
+            return CommitResult(success=False, message=f"Target folder already exists: {new_path}")
 
-        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
-        if not mirror_ok:
-            return False, f"Remote rename failed: {mirror_msg}"
+        mirror = self._mirror_rename(current, new_path, dry_run, allow_recovery=False)
+        if not mirror.success:
+            return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
 
         if dry_run:
-            return True, f"Would rename '{current.name}' to '{expected_name}'"
+            return CommitResult(
+                success=True, message=f"Would rename '{current.name}' to '{expected_name}'"
+            )
 
-        return self._commit_with_rollback(current, new_path, lambda: current.rename(new_path))
+        return self._commit_with_rollback(
+            current, new_path, lambda: current.rename(new_path), mirror_result=mirror
+        )
 
     def detect_multi_disc_from_metadata(self,
                                         audio_files: List[AudioFile]) -> int:
@@ -251,7 +284,7 @@ class FolderManager:
         return None, None
 
     def rename_folder(self, current_path: str, new_name: str,
-                      dry_run: bool = False) -> Tuple[bool, str]:
+                      dry_run: bool = False) -> CommitResult:
         """
         Rename folder to new name.
 
@@ -261,25 +294,27 @@ class FolderManager:
             dry_run: If True, don't actually rename
 
         Returns:
-            (success, message) tuple
+            CommitResult — `message` is the new path on success, an error otherwise.
         """
         current = Path(current_path)
         new_path = current.parent / new_name
 
         if new_path.exists():
-            return False, f"Target folder already exists: {new_path}"
+            return CommitResult(success=False, message=f"Target folder already exists: {new_path}")
 
         if current.name == new_name:
-            return True, "Folder already has correct name"
+            return CommitResult(success=True, message="Folder already has correct name")
 
-        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
-        if not mirror_ok:
-            return False, f"Remote rename failed: {mirror_msg}"
+        mirror = self._mirror_rename(current, new_path, dry_run, allow_recovery=False)
+        if not mirror.success:
+            return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
 
         if dry_run:
-            return True, f"Would rename to: {new_path}"
+            return CommitResult(success=True, message=f"Would rename to: {new_path}")
 
-        return self._commit_with_rollback(current, new_path, lambda: current.rename(new_path))
+        return self._commit_with_rollback(
+            current, new_path, lambda: current.rename(new_path), mirror_result=mirror
+        )
 
     def create_multi_disc_structure(self, source_folder: str, year: int,
                                     album_name: str, total_discs: int,
@@ -324,7 +359,7 @@ class FolderManager:
             return False, str(e)
 
     def move_file_to_disc_folder(self, file_path: str, disc_folder: str,
-                                 dry_run: bool = False) -> Tuple[bool, str]:
+                                 dry_run: bool = False) -> CommitResult:
         """
         Move audio file to appropriate disc folder.
 
@@ -334,25 +369,30 @@ class FolderManager:
             dry_run: If True, don't move
 
         Returns:
-            (success, new_path or error message)
+            CommitResult — `message` is the new path on success, an error otherwise.
         """
         source = Path(file_path)
         target = Path(disc_folder) / source.name
 
         if not source.exists():
-            return False, f"Source file not found: {source}"
+            return CommitResult(success=False, message=f"Source file not found: {source}")
 
         if target.exists():
-            return False, f"Target already exists: {target}"
+            return CommitResult(success=False, message=f"Target already exists: {target}")
 
-        mirror_ok, mirror_msg = self._mirror_rename(source, target, dry_run=dry_run)
-        if not mirror_ok:
-            return False, f"Remote move failed: {mirror_msg}"
+        mirror = self._mirror_rename(source, target, dry_run=dry_run)
+        if not mirror.success:
+            return CommitResult(success=False, message=f"Remote move failed: {mirror.message}")
 
         if dry_run:
-            return True, f"Would move to: {target}"
+            return CommitResult(success=True, message=f"Would move to: {target}")
 
-        return self._commit_with_rollback(source, target, lambda: shutil.move(str(source), str(target)))
+        return self._commit_with_rollback(
+            source,
+            target,
+            lambda: shutil.move(str(source), str(target)),
+            mirror_result=mirror,
+        )
 
     def reorganize_multi_disc_album(self, folder_path: str,
                                     audio_files: List[AudioFile],
@@ -501,7 +541,7 @@ class FolderManager:
         return current_name != expected_stem
 
     def rename_audio_file(self, file_path: str, new_name: str,
-                          dry_run: bool = False) -> Tuple[bool, str]:
+                          dry_run: bool = False) -> CommitResult:
         """
         Rename audio file to new name.
 
@@ -511,22 +551,24 @@ class FolderManager:
             dry_run: If True, don't actually rename
 
         Returns:
-            (success, new_path or error message)
+            CommitResult — `message` is the new path on success, an error otherwise.
         """
         current = Path(file_path)
         new_path = current.parent / new_name
 
         if new_path.exists() and new_path != current:
-            return False, f"Target file already exists: {new_path}"
+            return CommitResult(success=False, message=f"Target file already exists: {new_path}")
 
         if current.name == new_name:
-            return True, "File already has correct name"
+            return CommitResult(success=True, message="File already has correct name")
 
-        mirror_ok, mirror_msg = self._mirror_rename(current, new_path, dry_run)
-        if not mirror_ok:
-            return False, f"Remote rename failed: {mirror_msg}"
+        mirror = self._mirror_rename(current, new_path, dry_run)
+        if not mirror.success:
+            return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
 
         if dry_run:
-            return True, f"Would rename to: {new_name}"
+            return CommitResult(success=True, message=f"Would rename to: {new_name}")
 
-        return self._commit_with_rollback(current, new_path, lambda: current.rename(new_path))
+        return self._commit_with_rollback(
+            current, new_path, lambda: current.rename(new_path), mirror_result=mirror
+        )

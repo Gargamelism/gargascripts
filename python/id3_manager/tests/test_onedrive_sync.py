@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from onedrive_sync import OneDriveSync
+from sync_results import DivergenceConfirmation
 
 
 @pytest.fixture
@@ -79,23 +80,26 @@ class TestToRemote:
 class TestMoveto:
     def test_skips_when_outside_sync_root(self, sync, tmp_path):
         outside = tmp_path / "elsewhere" / "a.mp3"
-        ok, msg = sync.moveto(outside, tmp_path / "elsewhere" / "b.mp3")
-        assert ok is True
-        assert "outside sync root" in msg
+        result = sync.moveto(outside, tmp_path / "elsewhere" / "b.mp3")
+        assert result.success is True
+        assert result.mode == "skipped"
+        assert "outside sync root" in result.message
 
     def test_skips_when_src_equals_dst(self, sync, sync_root):
         p = sync_root / "a.mp3"
         p.touch()
-        ok, msg = sync.moveto(p, p)
-        assert ok is True
-        assert "identical" in msg
+        result = sync.moveto(p, p)
+        assert result.success is True
+        assert result.mode == "skipped"
+        assert "identical" in result.message
 
     def test_runs_rclone_moveto_on_success(self, sync, src_dst):
         src, dst = src_dst
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            ok, msg = sync.moveto(src, dst)
-        assert ok is True
+            result = sync.moveto(src, dst)
+        assert result.success is True
+        assert result.mode == "moveto"
         assert run.call_count == 1
         cmd = run.call_args.args[0]
         assert cmd[0] == "/usr/bin/rclone"
@@ -113,23 +117,36 @@ class TestMoveto:
 
     def test_returns_failure_on_nonzero_exit(self, sync, src_dst):
         src, dst = src_dst
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(returncode=3, stdout="", stderr="directory not found")
-            ok, msg = sync.moveto(src, dst)
-        assert ok is False
-        assert "exit 3" in msg
-        assert "directory not found" in msg
+        # Stub _confirm_source_missing so the new divergence path doesn't
+        # invoke real subprocess probes; we want this test to assert the
+        # plain "rclone error" failure, not the recovery branch.
+        with patch.object(
+            sync,
+            "_confirm_source_missing",
+            return_value=DivergenceConfirmation(False, "test stub"),
+        ):
+            with patch("subprocess.run") as run:
+                run.return_value = MagicMock(
+                    returncode=3, stdout="", stderr="directory not found"
+                )
+                result = sync.moveto(src, dst)
+        assert result.success is False
+        assert result.mode == "failed"
+        assert "exit 3" in result.message
+        assert "directory not found" in result.message
 
     def test_handles_timeout(self, sync, src_dst):
         src, dst = src_dst
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="", timeout=1)):
-            ok, msg = sync.moveto(src, dst)
-        assert ok is False
-        assert "timed out" in msg
+            result = sync.moveto(src, dst)
+        assert result.success is False
+        assert result.mode == "failed"
+        assert "timed out" in result.message
 
     def test_handles_missing_binary(self, sync, src_dst):
         src, dst = src_dst
         with patch("subprocess.run", side_effect=FileNotFoundError):
-            ok, msg = sync.moveto(src, dst)
-        assert ok is False
-        assert "not found" in msg
+            result = sync.moveto(src, dst)
+        assert result.success is False
+        assert result.mode == "failed"
+        assert "not found" in result.message

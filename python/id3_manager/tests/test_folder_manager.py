@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from folder_manager import FolderManager
 from models import TrackMetadata
+from sync_results import MoveResult
 
 
 @pytest.fixture
@@ -367,17 +368,17 @@ class TestRenameAudioFile:
 
     def test_returns_correct_name_message_when_same(self, folder_manager):
         """Should indicate file already has correct name."""
-        success, msg = folder_manager.rename_audio_file("/path/to/song.mp3", "song.mp3")
-        assert success is True
-        assert msg == "File already has correct name"
+        result = folder_manager.rename_audio_file("/path/to/song.mp3", "song.mp3")
+        assert result.success is True
+        assert result.message == "File already has correct name"
 
     def test_dry_run_returns_would_rename(self, folder_manager):
         """Should return would-rename message in dry run."""
-        success, msg = folder_manager.rename_audio_file(
+        result = folder_manager.rename_audio_file(
             "/path/to/old_name.mp3", "new_name.mp3", dry_run=True
         )
-        assert success is True
-        assert "Would rename to" in msg
+        assert result.success is True
+        assert "Would rename to" in result.message
 
 
 class TestRenameFolder:
@@ -385,17 +386,17 @@ class TestRenameFolder:
 
     def test_returns_correct_name_message_when_same(self, folder_manager):
         """Should indicate folder already has correct name."""
-        success, msg = folder_manager.rename_folder("/path/to/Album", "Album")
-        assert success is True
-        assert msg == "Folder already has correct name"
+        result = folder_manager.rename_folder("/path/to/Album", "Album")
+        assert result.success is True
+        assert result.message == "Folder already has correct name"
 
     def test_dry_run_returns_would_rename(self, folder_manager):
         """Should return would-rename message in dry run."""
-        success, msg = folder_manager.rename_folder(
+        result = folder_manager.rename_folder(
             "/path/to/Old Album", "2020 - New Album", dry_run=True
         )
-        assert success is True
-        assert "Would rename to" in msg
+        assert result.success is True
+        assert "Would rename to" in result.message
 
 
 class TestNormalizeDiscFolderName:
@@ -403,73 +404,73 @@ class TestNormalizeDiscFolderName:
 
     def test_already_correct_name_returns_same_path(self, folder_manager):
         """Should return same path when folder already named CD{N}."""
-        success, result = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/CD1", 1
         )
-        assert success is True
-        assert result == "/path/to/album/CD1"
+        assert result.success is True
+        assert result.message == "/path/to/album/CD1"
 
     def test_dry_run_disc_format(self, folder_manager):
         """Should return would-rename message for 'Disc 1' in dry run."""
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/Disc 1", 1, dry_run=True
         )
-        assert success is True
-        assert "Would rename" in msg
-        assert "'Disc 1'" in msg
-        assert "'CD1'" in msg
+        assert result.success is True
+        assert "Would rename" in result.message
+        assert "'Disc 1'" in result.message
+        assert "'CD1'" in result.message
 
     def test_dry_run_disk_format(self, folder_manager):
         """Should return would-rename message for 'disk 1' in dry run."""
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/disk 1", 1, dry_run=True
         )
-        assert success is True
-        assert "Would rename" in msg
-        assert "'disk 1'" in msg
-        assert "'CD1'" in msg
+        assert result.success is True
+        assert "Would rename" in result.message
+        assert "'disk 1'" in result.message
+        assert "'CD1'" in result.message
 
     def test_dry_run_d_format(self, folder_manager):
         """Should return would-rename message for 'd1' in dry run."""
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/d1", 1, dry_run=True
         )
-        assert success is True
-        assert "Would rename" in msg
-        assert "'d1'" in msg
-        assert "'CD1'" in msg
+        assert result.success is True
+        assert "Would rename" in result.message
+        assert "'d1'" in result.message
+        assert "'CD1'" in result.message
 
     def test_dry_run_number_format(self, folder_manager):
         """Should return would-rename message for '1' in dry run."""
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/1", 1, dry_run=True
         )
-        assert success is True
-        assert "Would rename" in msg
-        assert "'1'" in msg
-        assert "'CD1'" in msg
+        assert result.success is True
+        assert "Would rename" in result.message
+        assert "'1'" in result.message
+        assert "'CD1'" in result.message
 
     def test_normalizes_various_disc_numbers(self, folder_manager):
         """Should handle different disc numbers correctly in dry run."""
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/Disc 2", 2, dry_run=True
         )
-        assert success is True
-        assert "'CD2'" in msg
+        assert result.success is True
+        assert "'CD2'" in result.message
 
-        success, msg = folder_manager.normalize_disc_folder_name(
+        result = folder_manager.normalize_disc_folder_name(
             "/path/to/album/disk 3", 3, dry_run=True
         )
-        assert success is True
-        assert "'CD3'" in msg
+        assert result.success is True
+        assert "'CD3'" in result.message
 
 
 class TestOneDriveMirroring:
     """Rename/move operations mirror to OneDrive before committing locally."""
 
-    def _mock_sync(self, success: bool = True, message: str = "ok"):
+    def _mock_sync(self, success: bool = True, message: str = "ok", mode: str = "moveto"):
         sync = MagicMock()
-        sync.moveto.return_value = (success, message)
+        sync.moveto.return_value = MoveResult(success=success, message=message, mode=mode)
         return sync
 
     def test_rename_audio_file_mirrors_before_local(self, tmp_path):
@@ -479,9 +480,9 @@ class TestOneDriveMirroring:
         sync = self._mock_sync()
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, result = fm.rename_audio_file(str(mp3), "new.mp3")
+        result = fm.rename_audio_file(str(mp3), "new.mp3")
 
-        assert ok is True
+        assert result.success is True
         sync.moveto.assert_called_once()
         src_arg, dst_arg = sync.moveto.call_args.args
         assert Path(src_arg).name == "old.mp3"
@@ -493,14 +494,14 @@ class TestOneDriveMirroring:
         """If remote fails, local file is untouched."""
         mp3 = tmp_path / "old.mp3"
         mp3.write_bytes(b"fake")
-        sync = self._mock_sync(success=False, message="401 unauthorized")
+        sync = self._mock_sync(success=False, message="401 unauthorized", mode="failed")
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, result = fm.rename_audio_file(str(mp3), "new.mp3")
+        result = fm.rename_audio_file(str(mp3), "new.mp3")
 
-        assert ok is False
-        assert "Remote rename failed" in result
-        assert "401" in result
+        assert result.success is False
+        assert "Remote rename failed" in result.message
+        assert "401" in result.message
         assert mp3.exists()
         assert not (tmp_path / "new.mp3").exists()
 
@@ -510,9 +511,9 @@ class TestOneDriveMirroring:
         sync = self._mock_sync()
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, _ = fm.rename_audio_file(str(mp3), "new.mp3", dry_run=True)
+        result = fm.rename_audio_file(str(mp3), "new.mp3", dry_run=True)
 
-        assert ok is True
+        assert result.success is True
         assert sync.moveto.call_args.kwargs.get("dry_run") is True
         assert mp3.exists()  # dry run: local unchanged
 
@@ -522,9 +523,9 @@ class TestOneDriveMirroring:
         sync = self._mock_sync()
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, _ = fm.rename_folder(str(folder), "New Name")
+        result = fm.rename_folder(str(folder), "New Name")
 
-        assert ok is True
+        assert result.success is True
         sync.moveto.assert_called_once()
         assert (tmp_path / "New Name").is_dir()
         assert not folder.exists()
@@ -532,13 +533,13 @@ class TestOneDriveMirroring:
     def test_rename_folder_aborts_on_remote_failure(self, tmp_path):
         folder = tmp_path / "Old Name"
         folder.mkdir()
-        sync = self._mock_sync(success=False, message="throttled")
+        sync = self._mock_sync(success=False, message="throttled", mode="failed")
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, result = fm.rename_folder(str(folder), "New Name")
+        result = fm.rename_folder(str(folder), "New Name")
 
-        assert ok is False
-        assert "Remote rename failed" in result
+        assert result.success is False
+        assert "Remote rename failed" in result.message
         assert folder.exists()
         assert not (tmp_path / "New Name").exists()
 
@@ -548,9 +549,9 @@ class TestOneDriveMirroring:
         sync = self._mock_sync()
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, _ = fm.normalize_disc_folder_name(str(disc), 1)
+        result = fm.normalize_disc_folder_name(str(disc), 1)
 
-        assert ok is True
+        assert result.success is True
         sync.moveto.assert_called_once()
         assert (tmp_path / "CD1").is_dir()
 
@@ -562,9 +563,9 @@ class TestOneDriveMirroring:
         sync = self._mock_sync()
         fm = FolderManager(onedrive_sync=sync)
 
-        ok, _ = fm.move_file_to_disc_folder(str(mp3), str(disc))
+        result = fm.move_file_to_disc_folder(str(mp3), str(disc))
 
-        assert ok is True
+        assert result.success is True
         sync.moveto.assert_called_once()
         assert (disc / "song.mp3").exists()
         assert not mp3.exists()
@@ -575,7 +576,7 @@ class TestOneDriveMirroring:
         mp3.write_bytes(b"fake")
         fm = FolderManager()  # no onedrive_sync
 
-        ok, _ = fm.rename_audio_file(str(mp3), "new.mp3")
+        result = fm.rename_audio_file(str(mp3), "new.mp3")
 
-        assert ok is True
+        assert result.success is True
         assert (tmp_path / "new.mp3").exists()

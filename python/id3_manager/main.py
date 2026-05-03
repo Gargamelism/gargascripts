@@ -190,20 +190,20 @@ class ID3Processor:
             # Normalize disc folder names to CD{N} format
             for i, disc_folder in enumerate(disc_folders):
                 if disc_folder.detected_disc_number is not None:
-                    success, result = self.folder_manager.normalize_disc_folder_name(
+                    result = self.folder_manager.normalize_disc_folder_name(
                         disc_folder.folder_path,
                         disc_folder.detected_disc_number,
                         dry_run=self.args.dry_run
                     )
-                    if success and result != disc_folder.folder_path:
+                    if result.success and result.message != disc_folder.folder_path:
                         if not self.args.dry_run:
                             # Update the folder path in the AlbumFolder object
                             disc_folders[i] = AlbumFolder(
-                                folder_path=result,
+                                folder_path=result.message,
                                 detected_disc_number=disc_folder.detected_disc_number,
                                 parent_folder=disc_folder.parent_folder
                             )
-                        self.prompts.print(f"  Renamed disc folder: {result}")
+                        self.prompts.print(f"  Renamed disc folder: {result.message}")
 
             # Process each disc folder separately
             for disc_folder in disc_folders:
@@ -716,17 +716,16 @@ class ID3Processor:
                     else:
                         self.stats.errors.append(f"Failed to write tags: {af.file_path}")
 
-        # Push fresh content to OneDrive BEFORE renames. The subsequent
-        # rclone moveto inside _handle_file_renames will then carry the
-        # updated content to the new remote path; without this push, moveto
-        # only renames and the OLD content stays at the new path, producing
-        # `quickxor differ` warnings on the next bisync.
-        if tagged_files and not self.args.dry_run:
-            self._push_tag_writes_to_onedrive(tagged_files)
-
-        # Handle file renaming (unless disabled or a write failed)
+        # Apply renames first so each tagged file ends up at its final local
+        # path. The subsequent copyto then pushes the freshly tag-edited bytes
+        # directly to the NEW remote path — moveto carries the pre-write
+        # content there server-side, copyto overwrites it. Pushing before
+        # renames would land the upload on a path that's about to be renamed.
         if not write_failed and not self.args.no_file_rename:
             self._handle_file_renames(audio_files)
+
+        if tagged_files and not self.args.dry_run:
+            self._push_tag_writes_to_onedrive(tagged_files)
 
     def _push_tag_writes_to_onedrive(self, files: List[AudioFile]) -> None:
         """Push freshly tag-edited files to OneDrive via rclone copyto."""
@@ -734,15 +733,15 @@ class ID3Processor:
         if onedrive is None:
             return
         for af in files:
-            ok, msg = onedrive.copyto(Path(af.file_path), dry_run=self.args.dry_run)
-            if not ok:
+            result = onedrive.copyto(Path(af.file_path), dry_run=self.args.dry_run)
+            if not result.success:
                 self.stats.errors.append(
-                    f"OneDrive push failed for {af.file_path}: {msg}"
+                    f"OneDrive push failed for {af.file_path}: {result.message}"
                 )
                 self.prompts.print(
-                    f"  OneDrive push failed: {Path(af.file_path).name} - {msg}"
+                    f"  OneDrive push failed: {Path(af.file_path).name} - {result.message}"
                 )
-            elif not msg.startswith("skipped"):
+            elif not result.message.startswith("skipped"):
                 self.prompts.print(f"  Pushed: {Path(af.file_path).name}")
 
     def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:
@@ -775,31 +774,33 @@ class ID3Processor:
             new_name = self.folder_manager.generate_filename(metadata, extension)
 
             if new_name:
-                renames.append((af.file_path, new_name))
+                renames.append((af, new_name))
 
         if not renames:
             return
 
         # Confirm renames
-        if not self.prompts.confirm_file_renames(renames):
+        if not self.prompts.confirm_file_renames([(af.file_path, new_name) for af, new_name in renames]):
             return
 
         # Apply renames
-        for file_path, new_name in renames:
+        for af, new_name in renames:
+            file_path = af.file_path
             if self.args.dry_run:
                 self.prompts.print(f"  [DRY RUN] Would rename: {Path(file_path).name} -> {new_name}")
             else:
-                success, result = self.folder_manager.rename_audio_file(
+                commit = self.folder_manager.rename_audio_file(
                     file_path, new_name
                 )
-                if success:
-                    if result == "File already has correct name":
+                if commit.success:
+                    if commit.message == "File already has correct name":
                         self.prompts.print(f"  Skipped (already correct): {Path(file_path).name}")
                     else:
+                        af.file_path = str(Path(file_path).parent / new_name)
                         self.prompts.print(f"  Renamed: {Path(file_path).name} -> {new_name}")
                 else:
-                    self.prompts.print(f"  Failed: {Path(file_path).name} - {result}")
-                    self.stats.errors.append(f"Failed to rename {file_path}: {result}")
+                    self.prompts.print(f"  Failed: {Path(file_path).name} - {commit.message}")
+                    self.stats.errors.append(f"Failed to rename {file_path}: {commit.message}")
 
     def _handle_folder_rename(self, folder_path: str,
                               audio_files: List[AudioFile]) -> None:
@@ -844,14 +845,14 @@ class ID3Processor:
                     if self.args.dry_run:
                         self.prompts.print(f"  [DRY RUN] Would rename to: {new_name}")
                     else:
-                        success, msg = self.folder_manager.rename_folder(
+                        commit = self.folder_manager.rename_folder(
                             folder_path, new_name
                         )
-                        if success:
+                        if commit.success:
                             self.stats.folders_renamed += 1
                             self.prompts.print(f"  Renamed to: {new_name}")
                         else:
-                            self.stats.errors.append(msg)
+                            self.stats.errors.append(commit.message)
 
     def _discover_audio_files(self, folder_path: str) -> List[AudioFile]:
         """Discover and load audio files from folder."""

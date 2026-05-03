@@ -38,6 +38,7 @@ class SyncConfig:
     retry_delay: int = 30
     rclone_path: str = "/opt/homebrew/bin/rclone"
     quit_open_handle_procs: bool = True
+    resolve_orphans_conflicts: bool = False
 
 
 @dataclass
@@ -608,6 +609,139 @@ class RcloneSyncManager:
             return conflict_file.parent / original_name
         return None
 
+    @staticmethod
+    def _format_size(num_bytes: int) -> str:
+        """Format a byte count as a human-readable string."""
+        size = float(num_bytes)
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if size < 1024 or unit == "TB":
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{num_bytes} B"
+
+    def resolve_orphan_conflicts_interactively(self) -> int:
+        """Find orphan .conflictN files and prompt the user per-file (delete/ignore).
+
+        An orphan is a .conflictN file whose corresponding original file no longer
+        exists on the local side. Returns 0 on normal completion, 130 on SIGINT.
+        """
+        all_conflicts = list(self.config.local_path.rglob("*.conflict[0-9]*"))
+        orphans: list[tuple[Path, Path]] = []
+        for conflict_file in all_conflicts:
+            original = self._get_original_from_conflict(conflict_file)
+            if original is not None and not original.exists():
+                orphans.append((conflict_file, original))
+
+        if not orphans:
+            self.logger.info("No orphan conflict files found.")
+            return 0
+
+        self.logger.info(f"Found {len(orphans)} orphan conflict file(s).")
+        if self.config.dry_run:
+            self.logger.info("DRY-RUN MODE: no files will be deleted.")
+
+        deleted: list[str] = []
+        ignored: list[str] = []
+        sticky: Optional[str] = None  # "a" = delete-all, "A" = ignore-all
+        quit_early = False
+
+        for index, (conflict_file, missing_original) in enumerate(orphans, start=1):
+            if self._interrupted:
+                self.logger.warning("Interrupt detected, stopping orphan resolution")
+                break
+
+            try:
+                stat = conflict_file.stat()
+                size_str = self._format_size(stat.st_size)
+                mtime_str = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
+            except OSError as e:
+                self.logger.warning(f"Could not stat {conflict_file}: {e}")
+                size_str = "?"
+                mtime_str = "?"
+
+            try:
+                rel_conflict = conflict_file.relative_to(self.config.local_path)
+                rel_missing = missing_original.relative_to(self.config.local_path)
+            except ValueError:
+                rel_conflict = conflict_file
+                rel_missing = missing_original
+
+            print()
+            print(f"[{index}/{len(orphans)}] Orphan conflict file:")
+            print(f"  path:    {rel_conflict}")
+            print(f"  size:    {size_str}")
+            print(f"  mtime:   {mtime_str}")
+            print(f"  missing: {rel_missing}")
+
+            if sticky == "a":
+                choice = "d"
+                print("  action:  delete (sticky)")
+            elif sticky == "A":
+                choice = "i"
+                print("  action:  ignore (sticky)")
+            else:
+                choice = ""
+                while choice not in ("d", "i", "a", "A", "q"):
+                    try:
+                        choice = input("  [d]elete / [i]gnore / [a] delete-all / [A] ignore-all / [q]uit > ").strip()
+                    except EOFError:
+                        self.logger.warning("EOF on input, treating as quit")
+                        choice = "q"
+                        break
+                    if choice not in ("d", "i", "a", "A", "q"):
+                        print("  invalid choice, please enter one of: d, i, a, A, q")
+
+                if choice == "a":
+                    sticky = "a"
+                    choice = "d"
+                elif choice == "A":
+                    sticky = "A"
+                    choice = "i"
+
+            if choice == "q":
+                quit_early = True
+                break
+
+            if choice == "d":
+                if self.config.dry_run:
+                    self.logger.info(f"DRY-RUN: would delete orphan: {conflict_file}")
+                    deleted.append(str(conflict_file))
+                else:
+                    try:
+                        conflict_file.unlink()
+                        self.logger.info(f"Deleted orphan: {conflict_file}")
+                        deleted.append(str(conflict_file))
+                    except OSError as e:
+                        self.logger.error(f"Failed to delete {conflict_file}: {e}")
+            else:  # "i"
+                self.logger.info(f"Ignored orphan: {conflict_file}")
+                ignored.append(str(conflict_file))
+
+        untouched = len(orphans) - len(deleted) - len(ignored)
+        self.logger.info(
+            f"Resolved orphans: {len(deleted)} deleted, {len(ignored)} ignored, {untouched} untouched."
+        )
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        record_path = self.config.log_dir / f"orphan-resolution-{timestamp}.json"
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "dry_run": self.config.dry_run,
+            "total_orphans": len(orphans),
+            "deleted": deleted,
+            "ignored": ignored,
+            "untouched": untouched,
+            "quit_early": quit_early,
+        }
+        try:
+            with open(record_path, "w") as f:
+                json.dump(record, f, indent=2)
+            self.logger.info(f"Resolution record written to: {record_path}")
+        except OSError as e:
+            self.logger.warning(f"Failed to write resolution record: {e}")
+
+        return 130 if self._interrupted else 0
+
     def _resolve_single_conflict(self, conflict_file: Path) -> Optional[Resolution]:
         """Resolve a single conflict file by comparing local vs actual remote mtime."""
         original_file = self._get_original_from_conflict(conflict_file)
@@ -991,6 +1125,12 @@ Examples:
         help="Force resync to recover from corrupted bisync state",
     )
     parser.add_argument(
+        "--resolve-orphans-conflicts",
+        action="store_true",
+        help="Interactively review .conflictN files whose original is missing and "
+             "decide per file to delete or ignore. Does not run sync.",
+    )
+    parser.add_argument(
         "--max-retries",
         type=int,
         default=3,
@@ -1039,6 +1179,7 @@ def main() -> int:
         retry_delay=args.retry_delay,
         rclone_path=args.rclone_path,
         quit_open_handle_procs=args.quit_open_handle_procs,
+        resolve_orphans_conflicts=args.resolve_orphans_conflicts,
     )
 
     try:
@@ -1046,6 +1187,9 @@ def main() -> int:
     except ValueError:
         # Validation error already logged
         return 2
+
+    if config.resolve_orphans_conflicts:
+        return manager.resolve_orphan_conflicts_interactively()
 
     # Run the sync
     result = manager.run_sync_with_retry()
