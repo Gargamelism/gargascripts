@@ -181,38 +181,30 @@ def get_next_playlist_number(output_path: str) -> Tuple[int, str]:
     filename = os.path.basename(output_path)
     directory = os.path.dirname(os.path.abspath(output_path))
 
-    # Scan directory for existing numbered playlists
+    prefix_match = re.match(r"^(\d{3})_", filename)
+    base_filename = re.sub(r"^\d{3}_", "", filename) if prefix_match else filename
+
+    # Scan directory for existing numbered playlists with the same base name
     max_number = 0
     existing_files = set()
     try:
         if os.path.exists(directory):
             for existing_file in os.listdir(directory):
                 existing_files.add(existing_file.lower())
-                match = re.match(r"^(\d{3})_", existing_file)
-                if match:
-                    num = int(match.group(1))
-                    max_number = max(max_number, num)
+                match = re.match(r"^(\d{3})_(.+)$", existing_file)
+                if match and match.group(2).lower() == base_filename.lower():
+                    max_number = max(max_number, int(match.group(1)))
     except (OSError, PermissionError):
         pass
 
     # Check if filename already has 3-digit prefix
-    prefix_match = re.match(r"^(\d{3})_", filename)
     if prefix_match:
-        # File has a prefix - check if it would clash
         if filename.lower() not in existing_files:
-            # No clash, keep the existing prefix
             return None, output_path
         # Clash detected - fall through to renumber
 
-    # Next number is max + 1, or 1 if no numbered files exist
     next_number = max_number + 1
-    new_filename = f"{next_number:03d}_{filename}"
-
-    # If filename already had a prefix, remove it before adding new one
-    if prefix_match:
-        base_filename = re.sub(r"^\d{3}_", "", filename)
-        new_filename = f"{next_number:03d}_{base_filename}"
-
+    new_filename = f"{next_number:03d}_{base_filename}"
     new_path = os.path.join(directory, new_filename)
 
     return next_number, new_path
