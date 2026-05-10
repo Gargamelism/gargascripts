@@ -19,7 +19,7 @@ from config import (
     get_discogs_token_instructions, get_acrcloud_instructions
 )
 from models import (
-    AudioFile, TrackMetadata, ProcessingStats, AlbumFolder, TagStatus
+    AudioFile, TrackMetadata, ProcessingStats, AlbumFolder, TagStatus, ConfirmAction
 )
 from acrcloud_client import ACRCloudClient
 from discogs_client import DiscogsClient
@@ -276,12 +276,13 @@ class ID3Processor:
 
             result = self.prompts.confirm_tag_changes(files_with_changes)
 
-            if result == "apply":
-                self._apply_tag_changes(files_with_changes)
-            elif result == "quit":
-                sys.exit(0)
-            else:
-                self.stats.files_skipped += len(files_with_changes)
+            match result:
+                case ConfirmAction.APPLY:
+                    self._apply_tag_changes(files_with_changes)
+                case ConfirmAction.QUIT:
+                    sys.exit(0)
+                case _:
+                    self.stats.files_skipped += len(files_with_changes)
 
         # Handle files that only need renaming (complete tags, no proposed changes)
         if not self.args.no_file_rename:
@@ -316,10 +317,11 @@ class ID3Processor:
             self.prompts.show_file_comparison(af)
             result = self.prompts.confirm_tag_changes([af])
 
-            if result == "apply":
-                self._apply_tag_changes([af])
-            elif result == "quit":
-                sys.exit(0)
+            match result:
+                case ConfirmAction.APPLY:
+                    self._apply_tag_changes([af])
+                case ConfirmAction.QUIT:
+                    sys.exit(0)
         elif not self.args.no_file_rename and af.needs_rename:
             # File has complete tags but needs renaming
             self._handle_file_renames([af])

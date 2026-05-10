@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from models import (
-    AudioFile, TrackMetadata, DiscogsRelease, ProcessingStats, ACRCloudResult
+    AudioFile, TrackMetadata, DiscogsRelease, ProcessingStats, ACRCloudResult,
+    ConfirmAction,
 )
 
 
@@ -209,7 +210,7 @@ class InteractivePrompts:
         print(self._c("red", "Could not parse release ID from input."))
         return None
 
-    def confirm_tag_changes(self, audio_files: List[AudioFile]) -> str:
+    def confirm_tag_changes(self, audio_files: List[AudioFile]) -> ConfirmAction:
         """
         Confirm batch tag changes.
 
@@ -217,35 +218,42 @@ class InteractivePrompts:
             audio_files: Files with proposed changes
 
         Returns:
-            'apply', 'skip', or 'quit'
+            ConfirmAction indicating what to do
         """
         if self.auto_yes:
-            return "apply"
+            return ConfirmAction.APPLY
 
         files_with_changes = [af for af in audio_files if af.proposed_tags]
 
         while True:
             print(f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}")
             choice = self._prompt_choice(
-                "Apply changes? [y/N/r(eview)/e(dit)/q(uit)]:",
+                "Apply changes? [y/N/r(eview)/e(dit)/a(lbum edit)/q(uit)]:",
                 {
-                    "y": "apply", "yes": "apply",
-                    "n": "skip", "no": "skip",
-                    "r": "review", "e": "edit", "q": "quit",
+                    "y": ConfirmAction.APPLY, "yes": ConfirmAction.APPLY,
+                    "n": ConfirmAction.SKIP,  "no":  ConfirmAction.SKIP,
+                    "r": ConfirmAction.REVIEW,
+                    "e": ConfirmAction.EDIT,
+                    "a": ConfirmAction.ALBUM_EDIT,
+                    "q": ConfirmAction.QUIT,
                 },
-                default="skip",
+                default=ConfirmAction.SKIP,
             )
 
-            if choice == "review":
-                for af in files_with_changes:
-                    self.show_file_comparison(af)
-                continue
-            elif choice == "edit":
-                self._handle_edit_track(files_with_changes)
-                for af in files_with_changes:
-                    self.show_file_comparison(af)
-                continue
-            return choice
+            match choice:
+                case ConfirmAction.REVIEW:
+                    for af in files_with_changes:
+                        self.show_file_comparison(af)
+                case ConfirmAction.EDIT:
+                    self._handle_edit_track(files_with_changes)
+                    for af in files_with_changes:
+                        self.show_file_comparison(af)
+                case ConfirmAction.ALBUM_EDIT:
+                    self._handle_edit_album(files_with_changes)
+                    for af in files_with_changes:
+                        self.show_file_comparison(af)
+                case _:
+                    return choice
 
     def _handle_edit_track(self, audio_files: List[AudioFile]) -> None:
         """Allow user to select and edit a track's proposed tags."""
@@ -283,6 +291,64 @@ class InteractivePrompts:
                 pass
 
             print(self._c("red", "Invalid selection. Try again."))
+
+    def _handle_edit_album(self, audio_files: List[AudioFile]) -> None:
+        """Edit album-scoped fields and propagate to all tracks."""
+        editable_files = [af for af in audio_files if af.proposed_tags]
+        if not editable_files:
+            print(self._c("yellow", "No files with proposed tags to edit."))
+            return
+
+        fields = {
+            'b': ('Album',        'album',        False),
+            'l': ('Album Artist', 'album_artist', False),
+            'y': ('Year',         'year',         True),
+            'g': ('Genre',        'genre',        False),
+            'N': ('Total Tracks', 'total_tracks', True),
+            'D': ('Total Discs',  'total_discs',  True),
+        }
+
+        ref = editable_files[0].proposed_tags
+
+        while True:
+            print(f"\n{self._c('cyan', 'Album edit — changes apply to all tracks:')}")
+            for key, (display_name, attr_name, _) in fields.items():
+                value = getattr(ref, attr_name)
+                value_str = str(value) if value is not None else self._c("dim", "(empty)")
+                print(f"  [{key}] {display_name}: {value_str}")
+            print(f"  [x] Done")
+
+            choice = input(f"\n{self._c('bold', 'Select field to edit: ')} ").strip()
+
+            if choice == "x":
+                return
+            if choice not in fields:
+                print(self._c("red", "Invalid selection. Try again."))
+                continue
+
+            display_name, attr_name, is_int = fields[choice]
+            current_value = getattr(ref, attr_name)
+            default_str = f" [{current_value}]" if current_value is not None else ""
+            new_value = input(f"  {display_name}{default_str}: ").strip()
+
+            if not new_value and current_value is not None:
+                continue  # keep current value
+
+            if not new_value:
+                parsed = None
+            elif is_int:
+                try:
+                    parsed = int(new_value)
+                except ValueError:
+                    print(self._c("red", "Invalid number. Value not changed."))
+                    continue
+            else:
+                parsed = new_value
+
+            for af in editable_files:
+                setattr(af.proposed_tags, attr_name, parsed)
+
+            print(self._c("green", f"  {display_name} updated on {len(editable_files)} track(s)."))
 
     def _edit_track_fields(self, audio_file: AudioFile) -> None:
         """Edit specific fields of a track's proposed tags."""

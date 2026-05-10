@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from interactive import InteractivePrompts
-from models import TrackMetadata, AudioFile, ProcessingStats, ACRCloudResult
+from models import TrackMetadata, AudioFile, ProcessingStats, ACRCloudResult, ConfirmAction
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ class TestAutoYesBehavior:
             )
         ]
         result = prompts_auto_yes.confirm_tag_changes(files)
-        assert result == "apply"
+        assert result == ConfirmAction.APPLY
 
     def test_confirm_folder_rename_returns_true(self, prompts_auto_yes):
         """Should return True in auto_yes mode."""

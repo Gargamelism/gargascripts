@@ -14,6 +14,16 @@ class TagStatus(Enum):
     MISSING = "missing"
 
 
+class ConfirmAction(Enum):
+    """User's response at the confirm-tag-changes prompt."""
+    APPLY = "apply"
+    SKIP = "skip"
+    QUIT = "quit"
+    REVIEW = "review"
+    EDIT = "edit"
+    ALBUM_EDIT = "album_edit"
+
+
 @dataclass
 class TrackMetadata:
     """Represents metadata for a single track."""
