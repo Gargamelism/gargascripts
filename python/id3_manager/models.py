@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List
+from typing import Dict, List, NamedTuple, Optional
 
 from utils import file_needs_rename
 
@@ -22,6 +22,12 @@ class ConfirmAction(Enum):
     REVIEW = "review"
     EDIT = "edit"
     ALBUM_EDIT = "album_edit"
+
+
+class DiscTrack(NamedTuple):
+    """A (disc, track) position; the key used to detect rename collisions."""
+    disc: int
+    track: int
 
 
 @dataclass
@@ -167,6 +173,9 @@ class AudioFile:
     def inferred_disc_number(self) -> Optional[int]:
         """Return disc_number already set in proposed_tags (e.g. from folder structure), if any."""
         return self.proposed_tags.disc_number if self.proposed_tags else None
+
+
+CollisionMap = Dict[DiscTrack, List[AudioFile]]
 
 
 @dataclass

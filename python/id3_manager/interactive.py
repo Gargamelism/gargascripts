@@ -1,12 +1,13 @@
 """Interactive user prompts and confirmations."""
 
+import dataclasses
 import sys
 from pathlib import Path
 from typing import List, Optional
 
 from models import (
     AudioFile, TrackMetadata, DiscogsRelease, ProcessingStats, ACRCloudResult,
-    ConfirmAction,
+    ConfirmAction, CollisionMap,
 )
 
 
@@ -290,6 +291,39 @@ class InteractivePrompts:
             except ValueError:
                 pass
 
+            print(self._c("red", "Invalid selection. Try again."))
+
+    def edit_collision_files(self, collisions: CollisionMap) -> None:
+        """Let the user manually edit fields on the colliding files.
+
+        Seeds proposed_tags from current_tags where missing so _edit_track_fields
+        can run. Caller re-detects collisions afterwards and re-prompts.
+        """
+        files: List[AudioFile] = list({af for files in collisions.values() for af in files})
+
+        print(f"\n{self._c('cyan', 'Select a file to edit:')}")
+        for i, af in enumerate(files, 1):
+            tags = af.proposed_tags or af.current_tags
+            print(f"  [{i}] {Path(af.file_path).name}  ->  "
+                  f"track {tags.track_number}, {tags.title}")
+        print(f"  [c] Cancel (back to collision menu)")
+
+        while True:
+            choice = input(
+                f"\n{self._c('bold', f'Select file [1-{len(files)}/c]: ')} "
+            ).strip().lower()
+            if choice == "c":
+                return
+            try:
+                idx = int(choice)
+                if 1 <= idx <= len(files):
+                    af = files[idx - 1]
+                    if af.proposed_tags is None:
+                        af.proposed_tags = dataclasses.replace(af.current_tags)
+                    self._edit_track_fields(af)
+                    return
+            except ValueError:
+                pass
             print(self._c("red", "Invalid selection. Try again."))
 
     def _handle_edit_album(self, audio_files: List[AudioFile]) -> None:
@@ -643,6 +677,66 @@ class InteractivePrompts:
         """Display file rename operation."""
         print(f"  {current_name}")
         print(f"    -> {self._c('green', new_name)}")
+
+    def confirm_collision_resolution(self, collisions: CollisionMap) -> str:
+        """Prompt for how to resolve duplicate (disc, track#) assignments.
+
+        Returns "skip" (cancel conflicting files), "apply" (keep anyway),
+        "edit" (manually fix fields on the conflicting files), or "quit".
+        """
+        print(f"\n{self._c('red', 'Track-number collisions detected:')}")
+        for key, files in sorted(collisions.items()):
+            print(self._c('yellow', f"  Disc {key.disc}, track {key.track}:"))
+            for af in files:
+                tags = af.proposed_tags or af.current_tags
+                print(f"    {Path(af.file_path).name}  ->  {tags.title}")
+
+        if self.auto_yes:
+            print(self._c('red', '[AUTO] Collision detected - skipping conflicting files.'))
+            return "skip"
+
+        return self._prompt_choice(
+            "Resolve collisions? [s]kip conflicting / [e]dit fields / [a]pply anyway / [q]uit:",
+            {"s": "skip", "skip": "skip",
+             "e": "edit", "edit": "edit",
+             "a": "apply", "apply": "apply",
+             "q": "quit", "quit": "quit"},
+            default="skip",
+        )
+
+    def confirm_force_override(
+        self, af: AudioFile, filename: str, current: TrackMetadata, proposed: TrackMetadata
+    ) -> bool:
+        """Ask whether a --force result should overwrite already-complete tags.
+
+        Returns True to accept the new (possibly edited) tags, False to keep existing.
+        """
+        if self.auto_yes:
+            print(self._c('red', f'[AUTO] Keeping existing tags for {filename} (force override not auto-applied).'))
+            return False
+
+        while True:
+            print(f"\n{self._c('yellow', f'--force changes already-complete tags for {filename}:')}")
+            print(f"  track#:  {current.track_number}  ->  {proposed.track_number}")
+            print(f"  title:   {current.title}  ->  {proposed.title}")
+
+            choice = self._prompt_choice(
+                f"Override existing tags for {filename}? [y/e(dit)/N]:",
+                {"y": "accept", "yes": "accept",
+                 "e": "edit", "edit": "edit",
+                 "n": "decline", "no": "decline"},
+                default="decline",
+            )
+
+            if choice == "accept":
+                return True
+            if choice == "decline":
+                return False
+            # choice == "edit": open field editor on proposed, then re-show comparison
+            prev = af.proposed_tags
+            af.proposed_tags = proposed
+            self._edit_track_fields(af)
+            af.proposed_tags = prev
 
     def confirm_file_renames(self, renames: list) -> bool:
         """

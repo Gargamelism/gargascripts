@@ -12,14 +12,16 @@ import sys
 import unicodedata
 from dataclasses import replace
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
+from collections import defaultdict
 
 from config import (
     load_config, validate_config, eprint,
     get_discogs_token_instructions, get_acrcloud_instructions
 )
 from models import (
-    AudioFile, TrackMetadata, ProcessingStats, AlbumFolder, TagStatus, ConfirmAction
+    AudioFile, TrackMetadata, ProcessingStats, AlbumFolder, TagStatus, ConfirmAction,
+    DiscTrack, CollisionMap
 )
 from acrcloud_client import ACRCloudClient
 from discogs_client import DiscogsClient
@@ -266,6 +268,25 @@ class ID3Processor:
         # Fill in disc info from folder structure for any file still missing it
         self._backfill_disc_info(audio_files)
 
+        # Detect and resolve track-number collisions before confirming
+        conflicting: Set[AudioFile] = set()
+        collisions: CollisionMap = self._detect_track_collisions(audio_files)
+        while collisions:
+            action: str = self.prompts.confirm_collision_resolution(collisions)
+            if action == "quit":
+                sys.exit(0)
+            if action == "edit":
+                self.prompts.edit_collision_files(collisions)
+                collisions = self._detect_track_collisions(audio_files)
+                continue
+            if action == "skip":
+                conflicting = {af for grp in collisions.values() for af in grp}
+                for af in conflicting:
+                    af.proposed_tags = None
+                self.stats.files_skipped += len(conflicting)
+            # action == "apply" -> keep tags as-is
+            break
+
         # Confirm and apply changes
         files_with_changes = [af for af in audio_files if af.has_actual_changes]
 
@@ -288,7 +309,7 @@ class ID3Processor:
         if not self.args.no_file_rename:
             files_only_needing_rename = [
                 af for af in audio_files
-                if not af.has_actual_changes and af.needs_rename
+                if not af.has_actual_changes and af.needs_rename and af not in conflicting
             ]
             if files_only_needing_rename:
                 self._handle_file_renames(files_only_needing_rename)
@@ -480,6 +501,13 @@ class ID3Processor:
             )
 
             if proposed:
+                if self.args.force and af.current_tags.is_complete():
+                    cur = af.current_tags
+                    if proposed.track_number != cur.track_number:
+                        if not self.prompts.confirm_force_override(
+                            af, Path(af.file_path).name, cur, proposed
+                        ):
+                            return True          # keep existing tags, no second prompt
                 af.proposed_tags = proposed
                 return True
 
@@ -690,6 +718,14 @@ class ID3Processor:
             self.stats.files_skipped += 1
             return None
 
+        if self.args.force and af.current_tags.is_complete():
+            cur = af.current_tags
+            if proposed.track_number != cur.track_number:
+                if not self.prompts.confirm_force_override(
+                    af, Path(af.file_path).name, cur, proposed
+                ):
+                    return release          # cache the release, keep existing tags
+
         af.proposed_tags = proposed
         return release  # Return selected release for caching
 
@@ -745,6 +781,21 @@ class ID3Processor:
                 )
             elif not result.message.startswith("skipped"):
                 self.prompts.print(f"  Pushed: {Path(af.file_path).name}")
+
+    def _detect_track_collisions(self, audio_files: List[AudioFile]) -> CollisionMap:
+        """Group files that would share the same (disc, track) number.
+
+        Uses effective tags (proposed_tags or current_tags). Files with no
+        track_number are excluded. Returns only keys with >1 file.
+        """
+        buckets: Dict[DiscTrack, List[AudioFile]] = defaultdict(list)
+        for af in audio_files:
+            tags = af.proposed_tags or af.current_tags
+            if tags.track_number is None:
+                continue
+            disc = tags.disc_number if tags.disc_number is not None else 1
+            buckets[DiscTrack(disc=disc, track=tags.track_number)].append(af)
+        return {key: files for key, files in buckets.items() if len(files) > 1}
 
     def _backfill_disc_info(self, audio_files: List[AudioFile]) -> None:
         """Fill in disc info from folder structure for files where it is missing."""
