@@ -441,12 +441,12 @@ class FolderManager:
             disc_num = af.current_tags.disc_number or 1
             disc_folder = new_base / self.generate_disc_folder_name(disc_num)
 
-            success, msg = self.move_file_to_disc_folder(
+            move_result = self.move_file_to_disc_folder(
                 af.file_path, str(disc_folder), dry_run
             )
 
-            if not success:
-                errors.append(msg)
+            if not move_result.success:
+                errors.append(move_result.message)
 
         if errors:
             return False, f"Partial success. Errors:\n" + "\n".join(errors)
