@@ -11,6 +11,14 @@ from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TRCK, TPOS, TDRC, TCON
 
 from config import eprint
 from models import TrackMetadata
+from id3_handler.formats import (
+    MP4_TAGS as _MP4_TAGS,
+    parse_track_disc as _parse_track_disc,
+    parse_year as _parse_year,
+    get_tag_str as _get_tag_str,
+    get_mp4_tag as _get_mp4_tag,
+)
+from id3_handler.backup import SafeWriter
 
 
 class ID3Handler:
@@ -18,44 +26,25 @@ class ID3Handler:
 
     SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a"}
 
-    # MP4/M4A tag mapping (different from ID3)
-    MP4_TAGS = {
-        "title": "\xa9nam",
-        "artist": "\xa9ART",
-        "album": "\xa9alb",
-        "album_artist": "aART",
-        "track": "trkn",  # tuple: (track_num, total)
-        "disc": "disk",   # tuple: (disc_num, total)
-        "year": "\xa9day",
-        "genre": "\xa9gen",
-    }
+    MP4_TAGS = _MP4_TAGS
+
+    def __init__(self, writer=None):
+        self._writer = writer or SafeWriter()
 
     @classmethod
     def is_supported(cls, file_path: str) -> bool:
-        """Check if file format is supported."""
         return Path(file_path).suffix.lower() in cls.SUPPORTED_EXTENSIONS
 
     @classmethod
     def get_format(cls, file_path: str) -> Optional[str]:
-        """Get audio format from file extension."""
         ext = Path(file_path).suffix.lower()
         if ext in cls.SUPPORTED_EXTENSIONS:
-            return ext[1:]  # Remove leading dot
+            return ext[1:]
         return None
 
     def read_tags(self, file_path: str) -> TrackMetadata:
-        """
-        Read existing tags from audio file.
-
-        Args:
-            file_path: Path to audio file
-
-        Returns:
-            TrackMetadata with current tags
-        """
         path = Path(file_path)
         ext = path.suffix.lower()
-
         if ext == ".mp3":
             return self._read_mp3_tags(file_path)
         elif ext == ".flac":
@@ -67,17 +56,14 @@ class ID3Handler:
             return TrackMetadata()
 
     def _read_mp3_tags(self, file_path: str) -> TrackMetadata:
-        """Read ID3v2 tags from MP3 file."""
         audio = MP3(file_path)
         tags = audio.tags or {}
-
         track_num, total_tracks = self._parse_track_disc(
             str(tags.get("TRCK", [""])[0]) if tags.get("TRCK") else ""
         )
         disc_num, total_discs = self._parse_track_disc(
             str(tags.get("TPOS", [""])[0]) if tags.get("TPOS") else ""
         )
-
         return TrackMetadata(
             title=self._get_tag_str(tags, "TIT2"),
             artist=self._get_tag_str(tags, "TPE1"),
@@ -92,13 +78,10 @@ class ID3Handler:
         )
 
     def _read_flac_tags(self, file_path: str) -> TrackMetadata:
-        """Read Vorbis comments from FLAC file."""
         audio = FLAC(file_path)
-
         track_num, total_tracks = self._parse_track_disc(
             audio.get("tracknumber", [""])[0]
         )
-        # Also check totaltracks tag
         if total_tracks is None:
             total_str = audio.get("totaltracks", [""])[0]
             if total_str:
@@ -106,7 +89,6 @@ class ID3Handler:
                     total_tracks = int(total_str)
                 except ValueError:
                     pass
-
         disc_num, total_discs = self._parse_track_disc(
             audio.get("discnumber", [""])[0]
         )
@@ -117,7 +99,6 @@ class ID3Handler:
                     total_discs = int(total_str)
                 except ValueError:
                     pass
-
         return TrackMetadata(
             title=audio.get("title", [None])[0],
             artist=audio.get("artist", [None])[0],
@@ -132,18 +113,14 @@ class ID3Handler:
         )
 
     def _read_m4a_tags(self, file_path: str) -> TrackMetadata:
-        """Read MP4 tags from M4A file."""
         audio = MP4(file_path)
         tags = audio.tags or {}
-
         track_info = tags.get(self.MP4_TAGS["track"], [(None, None)])[0]
         disc_info = tags.get(self.MP4_TAGS["disc"], [(None, None)])[0]
-
         track_num = track_info[0] if track_info and track_info[0] else None
         total_tracks = track_info[1] if track_info and len(track_info) > 1 and track_info[1] else None
         disc_num = disc_info[0] if disc_info and disc_info[0] else None
         total_discs = disc_info[1] if disc_info and len(disc_info) > 1 and disc_info[1] else None
-
         return TrackMetadata(
             title=self._get_mp4_tag(tags, "title"),
             artist=self._get_mp4_tag(tags, "artist"),
@@ -159,92 +136,12 @@ class ID3Handler:
 
     def write_tags(self, file_path: str, metadata: TrackMetadata,
                    preserve_existing: bool = True) -> bool:
-        """
-        Write tags to audio file.
-
-        Args:
-            file_path: Path to audio file
-            metadata: Metadata to write
-            preserve_existing: If True, only fill missing tags
-
-        Returns:
-            True if successful, False otherwise
-        """
-        path = Path(file_path)
-        ext = path.suffix.lower()
-
-        # Pre-write validation: skip already-unreadable files
-        try:
-            self.read_tags(file_path)
-        except Exception as e:
-            eprint(f"Skipping unreadable file (won't write): {path.name} - {e}")
-            return False
-
-        # In-memory backup so we can restore if the write corrupts the file
-        try:
-            original_bytes = path.read_bytes()
-        except OSError as e:
-            eprint(f"Cannot read file for backup: {path.name} - {e}")
-            return False
-
-        try:
-            if preserve_existing:
-                existing = self.read_tags(file_path)
-                metadata = existing.merge_with(metadata)
-
-            if ext == ".mp3":
-                ok = self._write_mp3_tags(file_path, metadata)
-            elif ext == ".flac":
-                ok = self._write_flac_tags(file_path, metadata)
-            elif ext == ".m4a":
-                ok = self._write_m4a_tags(file_path, metadata)
-            else:
-                return False
-
-            if not ok:
-                try:
-                    path.write_bytes(original_bytes)
-                except (OSError, IOError) as restore_err:
-                    raise RuntimeError(
-                        f"Write failed for {path.name} and restore also failed: {restore_err}"
-                    )
-                return False
-
-            # Post-write validation: re-read to confirm the file is still valid
-            try:
-                self.read_tags(file_path)
-            except Exception as e:
-                try:
-                    path.write_bytes(original_bytes)
-                except (OSError, IOError) as restore_err:
-                    raise RuntimeError(
-                        f"Write corrupted {path.name} and restore also failed: {restore_err}"
-                    ) from e
-                raise RuntimeError(
-                    f"Write corrupted {path.name} — original restored"
-                ) from e
-
-            return True
-
-        except RuntimeError:
-            raise
-        except Exception as e:
-            try:
-                path.write_bytes(original_bytes)
-            except (OSError, IOError) as restore_err:
-                raise RuntimeError(
-                    f"Failed to write tags to {path.name} and restore also failed: {restore_err}"
-                ) from e
-            raise RuntimeError(
-                f"Failed to write tags to {path.name} — original restored"
-            ) from e
+        return self._writer.write(self, file_path, metadata, preserve_existing)
 
     def _write_mp3_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
-        """Write ID3v2 tags to MP3 file."""
         audio = MP3(file_path)
         if audio.tags is None:
             audio.add_tags()
-
         if metadata.title:
             audio.tags.add(TIT2(encoding=3, text=metadata.title))
         if metadata.artist:
@@ -267,14 +164,11 @@ class ID3Handler:
             audio.tags.add(TDRC(encoding=3, text=str(metadata.year)))
         if metadata.genre:
             audio.tags.add(TCON(encoding=3, text=metadata.genre))
-
         audio.save()
         return True
 
     def _write_flac_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
-        """Write Vorbis comments to FLAC file."""
         audio = FLAC(file_path)
-
         if metadata.title:
             audio["title"] = metadata.title
         if metadata.artist:
@@ -295,16 +189,13 @@ class ID3Handler:
             audio["date"] = str(metadata.year)
         if metadata.genre:
             audio["genre"] = metadata.genre
-
         audio.save()
         return True
 
     def _write_m4a_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
-        """Write MP4 tags to M4A file."""
         audio = MP4(file_path)
         if audio.tags is None:
             audio.add_tags()
-
         if metadata.title:
             audio.tags[self.MP4_TAGS["title"]] = [metadata.title]
         if metadata.artist:
@@ -325,52 +216,17 @@ class ID3Handler:
             audio.tags[self.MP4_TAGS["year"]] = [str(metadata.year)]
         if metadata.genre:
             audio.tags[self.MP4_TAGS["genre"]] = [metadata.genre]
-
         audio.save()
         return True
 
     def _get_tag_str(self, tags: dict, key: str) -> Optional[str]:
-        """Get string value from ID3 tag."""
-        tag = tags.get(key)
-        if tag:
-            value = str(tag[0]) if hasattr(tag, "__getitem__") else str(tag)
-            return value if value else None
-        return None
+        return _get_tag_str(tags, key)
 
     def _get_mp4_tag(self, tags: dict, key: str) -> Optional[str]:
-        """Get string value from MP4 tag."""
-        mp4_key = self.MP4_TAGS.get(key)
-        if mp4_key and mp4_key in tags:
-            value = tags[mp4_key]
-            if isinstance(value, list) and value:
-                return str(value[0]) if value[0] else None
-            return str(value) if value else None
-        return None
+        return _get_mp4_tag(tags, key, self.MP4_TAGS)
 
     def _parse_track_disc(self, value: str) -> tuple:
-        """
-        Parse track/disc string like '3/12' or '3'.
-
-        Returns:
-            (number, total) tuple
-        """
-        if not value:
-            return None, None
-
-        parts = value.split("/")
-        try:
-            num = int(parts[0]) if parts[0].strip() else None
-            total = int(parts[1]) if len(parts) > 1 and parts[1].strip() else None
-            return num, total
-        except ValueError:
-            return None, None
+        return _parse_track_disc(value)
 
     def _parse_year(self, value: str) -> Optional[int]:
-        """Parse year from various date formats."""
-        if not value:
-            return None
-        try:
-            # Handle formats like "2020", "2020-01-15", etc.
-            return int(str(value)[:4])
-        except (ValueError, IndexError):
-            return None
+        return _parse_year(value)
