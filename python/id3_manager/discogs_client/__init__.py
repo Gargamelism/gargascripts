@@ -10,6 +10,10 @@ from config import eprint
 from models import DiscogsRelease, DiscogsTrack
 from . import parsing as _parsing
 
+# Title normalization patterns for track matching
+_RE_LEADING_TRACKNUM = re.compile(r"^\d+[\.\-\s]+")
+_RE_TRAILING_PAREN = re.compile(r"\s*\([^)]*\)\s*$")
+
 
 
 class DiscogsClient:
@@ -123,15 +127,15 @@ class DiscogsClient:
     def match_track_to_release(self, release: DiscogsRelease,
                                track_title: str) -> Optional[DiscogsTrack]:
         title_lower = track_title.lower().strip()
-        clean_title = re.sub(r"^\d+[\.\-\s]+", "", title_lower)
-        clean_title = re.sub(r"\s*\([^)]*\)\s*$", "", clean_title)
+        clean_title = _RE_LEADING_TRACKNUM.sub("", title_lower)
+        clean_title = _RE_TRAILING_PAREN.sub("", clean_title)
 
         best_match = None
         best_score = 0
 
         for track in release.tracklist:
             track_lower = track.title.lower().strip()
-            clean_track = re.sub(r"\s*\([^)]*\)\s*$", "", track_lower)
+            clean_track = _RE_TRAILING_PAREN.sub("", track_lower)
 
             if clean_title == clean_track:
                 return track

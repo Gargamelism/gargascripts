@@ -5,13 +5,22 @@ from typing import Optional
 
 from models import DiscogsRelease, DiscogsTrack
 
+# Position format patterns
+_RE_VINYL = re.compile(r"^([A-Za-z])(\d+)$")
+_RE_DISC_TRACK = re.compile(r"^(\d+)-(\d+)$")
+_RE_CD_TRACK = re.compile(r"^CD(\d+)-(\d+)$", re.IGNORECASE)
+_RE_SIMPLE_TRACK = re.compile(r"^(\d+)$")
+
+# Artist name cleanup
+_RE_ARTIST_DISAMBIG = re.compile(r"\s*\(\d+\)$")
+
 
 def is_vinyl_position(position: str) -> bool:
-    return bool(re.match(r"^[A-Za-z]\d+$", position))
+    return bool(_RE_VINYL.match(position))
 
 
 def parse_vinyl_position(position: str) -> tuple:
-    match = re.match(r"^([A-Za-z])(\d+)$", position)
+    match = _RE_VINYL.match(position)
     if match:
         return match.group(1).upper(), int(match.group(2))
     return None, None
@@ -22,22 +31,22 @@ def parse_position(position: str) -> tuple:
     if not position:
         return None, None
 
-    disc_track_match = re.match(r"^(\d+)-(\d+)$", position)
+    disc_track_match = _RE_DISC_TRACK.match(position)
     if disc_track_match:
         return int(disc_track_match.group(2)), int(disc_track_match.group(1))
 
-    cd_match = re.match(r"^CD(\d+)-(\d+)$", position, re.IGNORECASE)
+    cd_match = _RE_CD_TRACK.match(position)
     if cd_match:
         return int(cd_match.group(2)), int(cd_match.group(1))
 
-    vinyl_match = re.match(r"^([A-Za-z])(\d+)$", position)
+    vinyl_match = _RE_VINYL.match(position)
     if vinyl_match:
         side = vinyl_match.group(1).upper()
         track = int(vinyl_match.group(2))
         disc = (ord(side) - ord('A')) // 2 + 1
         return track, disc
 
-    simple_match = re.match(r"^(\d+)$", position)
+    simple_match = _RE_SIMPLE_TRACK.match(position)
     if simple_match:
         return int(simple_match.group(1)), 1
 
@@ -120,7 +129,7 @@ def parse_release(data: dict) -> DiscogsRelease:
     total_discs = max(disc_numbers) if disc_numbers else 1
 
     artists = [a.get("name", "") for a in data.get("artists", [])]
-    artists = [re.sub(r"\s*\(\d+\)$", "", a) for a in artists]
+    artists = [_RE_ARTIST_DISAMBIG.sub("", a) for a in artists]
 
     labels = data.get("labels", [])
     label = labels[0].get("name") if labels else None
