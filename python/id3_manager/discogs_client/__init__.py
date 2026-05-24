@@ -5,6 +5,7 @@ import time
 from typing import List, Optional
 
 import requests
+from rapidfuzz import fuzz
 
 from config import eprint
 from models import DiscogsRelease, DiscogsTrack
@@ -140,11 +141,10 @@ class DiscogsClient:
             if clean_title == clean_track:
                 return track
 
-            if clean_title in clean_track or clean_track in clean_title:
-                score = min(len(clean_title), len(clean_track)) / max(len(clean_title), len(clean_track))
-                if score > best_score:
-                    best_score = score
-                    best_match = track
+            score = fuzz.token_sort_ratio(clean_title, clean_track) / 100
+            if score > best_score:
+                best_score = score
+                best_match = track
 
         if best_score > 0.7:
             return best_match

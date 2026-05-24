@@ -151,6 +151,23 @@ class TestMatchTrackToRelease:
         assert track is not None
         assert track.title == "Second Song"
 
+    def test_typo_in_title(self, client, release_with_tracks):
+        """Should match despite a single-character typo."""
+        track = client.match_track_to_release(release_with_tracks, "Firsst Song")
+        assert track is not None
+        assert track.title == "First Song"
+
+    def test_word_order_variation(self, client):
+        """Should match when words appear in different order."""
+        release = DiscogsRelease(
+            release_id=1, title="A", artists=["A"], year=2020,
+            tracklist=[DiscogsTrack(position="1", title="You And Me", track_number=1, disc_number=1)],
+            total_discs=1,
+        )
+        track = client.match_track_to_release(release, "Me And You")
+        assert track is not None
+        assert track.title == "You And Me"
+
 
 class TestParseReleaseVinyl:
     """Tests for _parse_release with vinyl-style positions."""
