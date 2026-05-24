@@ -10,16 +10,13 @@ from onedrive_sync import OneDriveSync
 from sync_results import CommitResult, MoveResult
 from . import disc as _disc
 from . import naming as _naming
+from .disc import DISC_PATTERNS
 
 
 class FolderManager:
     """Manages folder detection, multi-disc detection, and renaming."""
 
-    DISC_PATTERNS = [
-        r"(?:cd|disc|disk)\s*(\d+)",
-        r"^(\d+)$",
-        r"d(\d+)",
-    ]
+    DISC_PATTERNS = DISC_PATTERNS
 
     ALBUM_FOLDER_PATTERN = r"^(\d{4})\s*-\s*(.+)$"
 
@@ -83,9 +80,6 @@ class FolderManager:
     def detect_multi_disc_structure(self, folder_path: str) -> List[AlbumFolder]:
         return _disc.detect_multi_disc_structure(self, folder_path)
 
-    def _extract_disc_number(self, folder_name: str) -> Optional[int]:
-        return _disc.extract_disc_number(self.DISC_PATTERNS, folder_name)
-
     def infer_disc_info_from_path(self, file_path: str) -> Optional[Tuple[int, int]]:
         return _disc.infer_disc_info_from_path(self, file_path)
 
@@ -120,9 +114,6 @@ class FolderManager:
 
     def generate_disc_folder_name(self, disc_number: int) -> str:
         return _naming.generate_disc_folder_name(disc_number)
-
-    def _sanitize_name(self, name: str) -> str:
-        return _naming.sanitize_name(name)
 
     def is_folder_properly_named(self, folder_path: str) -> bool:
         return _naming.is_folder_properly_named(folder_path, self.ALBUM_FOLDER_PATTERN)

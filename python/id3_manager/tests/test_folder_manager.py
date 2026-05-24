@@ -9,6 +9,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from folder_manager import FolderManager
+from folder_manager.naming import sanitize_name
+from folder_manager.disc import extract_disc_number, DISC_PATTERNS
 from models import TrackMetadata
 from sync_results import MoveResult
 
@@ -20,11 +22,10 @@ def folder_manager():
 
 
 class TestSanitizeName:
-    """Tests for _sanitize_name method."""
+    """Tests for sanitize_name."""
 
-    def test_replaces_invalid_characters(self, folder_manager):
-        """Should replace <, >, :, \", /, \\, |, ?, * with underscore."""
-        result = folder_manager._sanitize_name('Test<>:"/\\|?*Name')
+    def test_replaces_invalid_characters(self):
+        result = sanitize_name('Test<>:"/\\|?*Name')
         assert "<" not in result
         assert ">" not in result
         assert ":" not in result
@@ -35,21 +36,18 @@ class TestSanitizeName:
         assert "?" not in result
         assert "*" not in result
 
-    def test_strips_leading_trailing_dots_and_spaces(self, folder_manager):
-        """Should remove leading/trailing dots and spaces."""
-        assert folder_manager._sanitize_name("  Test  ") == "Test"
-        assert folder_manager._sanitize_name("...Test...") == "Test"
-        assert folder_manager._sanitize_name(". Test .") == "Test"
+    def test_strips_leading_trailing_dots_and_spaces(self):
+        assert sanitize_name("  Test  ") == "Test"
+        assert sanitize_name("...Test...") == "Test"
+        assert sanitize_name(". Test .") == "Test"
 
-    def test_collapses_multiple_spaces(self, folder_manager):
-        """Should collapse multiple spaces into one."""
-        result = folder_manager._sanitize_name("Test    Multiple   Spaces")
+    def test_collapses_multiple_spaces(self):
+        result = sanitize_name("Test    Multiple   Spaces")
         assert "  " not in result
         assert result == "Test Multiple Spaces"
 
-    def test_collapses_multiple_underscores(self, folder_manager):
-        """Should collapse multiple underscores into space."""
-        result = folder_manager._sanitize_name("Test___Name")
+    def test_collapses_multiple_underscores(self):
+        result = sanitize_name("Test___Name")
         assert "___" not in result
 
 
@@ -206,34 +204,29 @@ class TestIsFolderProperlyNamed:
 
 
 class TestExtractDiscNumber:
-    """Tests for _extract_disc_number method."""
+    """Tests for extract_disc_number."""
 
-    def test_extracts_cd_number(self, folder_manager):
-        """Should extract disc number from CD{N} format."""
-        assert folder_manager._extract_disc_number("CD1") == 1
-        assert folder_manager._extract_disc_number("CD2") == 2
-        assert folder_manager._extract_disc_number("cd3") == 3
+    def test_extracts_cd_number(self):
+        assert extract_disc_number(DISC_PATTERNS, "CD1") == 1
+        assert extract_disc_number(DISC_PATTERNS, "CD2") == 2
+        assert extract_disc_number(DISC_PATTERNS, "cd3") == 3
 
-    def test_extracts_disc_number(self, folder_manager):
-        """Should extract disc number from Disc {N} format."""
-        assert folder_manager._extract_disc_number("Disc 1") == 1
-        assert folder_manager._extract_disc_number("Disc 2") == 2
-        assert folder_manager._extract_disc_number("disc 3") == 3
+    def test_extracts_disc_number(self):
+        assert extract_disc_number(DISC_PATTERNS, "Disc 1") == 1
+        assert extract_disc_number(DISC_PATTERNS, "Disc 2") == 2
+        assert extract_disc_number(DISC_PATTERNS, "disc 3") == 3
 
-    def test_extracts_disk_number(self, folder_manager):
-        """Should extract disc number from Disk {N} format."""
-        assert folder_manager._extract_disc_number("Disk1") == 1
-        assert folder_manager._extract_disc_number("Disk 2") == 2
+    def test_extracts_disk_number(self):
+        assert extract_disc_number(DISC_PATTERNS, "Disk1") == 1
+        assert extract_disc_number(DISC_PATTERNS, "Disk 2") == 2
 
-    def test_returns_none_for_no_disc(self, folder_manager):
-        """Should return None when no disc pattern found."""
-        assert folder_manager._extract_disc_number("Album Name") is None
-        assert folder_manager._extract_disc_number("Regular Folder") is None
+    def test_returns_none_for_no_disc(self):
+        assert extract_disc_number(DISC_PATTERNS, "Album Name") is None
+        assert extract_disc_number(DISC_PATTERNS, "Regular Folder") is None
 
-    def test_extracts_d_number(self, folder_manager):
-        """Should extract disc number from d{N} format."""
-        assert folder_manager._extract_disc_number("d1") == 1
-        assert folder_manager._extract_disc_number("d2") == 2
+    def test_extracts_d_number(self):
+        assert extract_disc_number(DISC_PATTERNS, "d1") == 1
+        assert extract_disc_number(DISC_PATTERNS, "d2") == 2
 
 
 class TestParseFolderName:

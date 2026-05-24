@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from discogs_client import DiscogsClient
+from discogs_client.parsing import parse_position, is_vinyl_position, parse_release
 from models import DiscogsRelease, DiscogsTrack
 
 
@@ -36,79 +37,65 @@ def release_with_tracks():
 
 
 class TestParsePosition:
-    """Tests for _parse_position method."""
+    """Tests for parse_position."""
 
-    def test_simple_number(self, client):
-        """Should parse simple track number (defaults disc to 1)."""
-        track, disc = client._parse_position("1")
+    def test_simple_number(self):
+        track, disc = parse_position("1")
         assert track == 1
-        assert disc == 1  # Implementation defaults to disc 1
+        assert disc == 1
 
-    def test_simple_number_multi_digit(self, client):
-        """Should parse multi-digit track numbers (defaults disc to 1)."""
-        track, disc = client._parse_position("12")
+    def test_simple_number_multi_digit(self):
+        track, disc = parse_position("12")
         assert track == 12
-        assert disc == 1  # Implementation defaults to disc 1
-
-    def test_vinyl_side_a(self, client):
-        """Should parse A-side vinyl positions."""
-        track, disc = client._parse_position("A1")
-        assert track == 1
         assert disc == 1
 
-        track, disc = client._parse_position("A2")
+    def test_vinyl_side_a(self):
+        track, disc = parse_position("A1")
+        assert track == 1
+        assert disc == 1
+        track, disc = parse_position("A2")
         assert track == 2
         assert disc == 1
 
-    def test_vinyl_side_b(self, client):
-        """Should parse B-side vinyl positions."""
-        track, disc = client._parse_position("B1")
+    def test_vinyl_side_b(self):
+        track, disc = parse_position("B1")
         assert track == 1
         assert disc == 1
-
-        track, disc = client._parse_position("B2")
+        track, disc = parse_position("B2")
         assert track == 2
         assert disc == 1
 
-    def test_disc_track_format(self, client):
-        """Should parse disc-track format like '1-3'."""
-        track, disc = client._parse_position("1-3")
+    def test_disc_track_format(self):
+        track, disc = parse_position("1-3")
         assert track == 3
         assert disc == 1
-
-        track, disc = client._parse_position("2-5")
+        track, disc = parse_position("2-5")
         assert track == 5
         assert disc == 2
 
-    def test_cd_prefix_format(self, client):
-        """Should parse CD prefix format like 'CD1-3'."""
-        track, disc = client._parse_position("CD1-3")
+    def test_cd_prefix_format(self):
+        track, disc = parse_position("CD1-3")
         assert track == 3
         assert disc == 1
-
-        track, disc = client._parse_position("CD2-1")
+        track, disc = parse_position("CD2-1")
         assert track == 1
         assert disc == 2
 
-    def test_case_insensitive(self, client):
-        """Should handle lowercase input."""
-        track, disc = client._parse_position("a1")
+    def test_case_insensitive(self):
+        track, disc = parse_position("a1")
         assert track == 1
         assert disc == 1
-
-        track, disc = client._parse_position("cd1-3")
+        track, disc = parse_position("cd1-3")
         assert track == 3
         assert disc == 1
 
-    def test_empty_position(self, client):
-        """Should return (None, None) for empty position."""
-        track, disc = client._parse_position("")
+    def test_empty_position(self):
+        track, disc = parse_position("")
         assert track is None
         assert disc is None
 
-    def test_none_position(self, client):
-        """Should handle None-ish values gracefully."""
-        track, disc = client._parse_position("")
+    def test_none_position(self):
+        track, disc = parse_position("")
         assert track is None
         assert disc is None
 
@@ -187,7 +174,7 @@ class TestParseReleaseVinyl:
             ],
         }
 
-        release = client._parse_release(data)
+        release = parse_release(data)
 
         assert len(release.tracklist) == 6
         assert release.total_discs == 1
@@ -226,7 +213,7 @@ class TestParseReleaseVinyl:
             ],
         }
 
-        release = client._parse_release(data)
+        release = parse_release(data)
 
         assert len(release.tracklist) == 8
         assert release.total_discs == 2
@@ -269,7 +256,7 @@ class TestParseReleaseVinyl:
             ],
         }
 
-        release = client._parse_release(data)
+        release = parse_release(data)
 
         assert len(release.tracklist) == 3
         assert release.total_discs == 1
@@ -298,7 +285,7 @@ class TestParseReleaseVinyl:
             ],
         }
 
-        release = client._parse_release(data)
+        release = parse_release(data)
 
         # Should only have 4 tracks, not 6
         assert len(release.tracklist) == 4
@@ -311,19 +298,17 @@ class TestParseReleaseVinyl:
 
 
 class TestIsVinylPosition:
-    """Tests for _is_vinyl_position helper method."""
+    """Tests for is_vinyl_position."""
 
-    def test_vinyl_positions(self, client):
-        """Should identify vinyl-style positions."""
-        assert client._is_vinyl_position("A1") is True
-        assert client._is_vinyl_position("B2") is True
-        assert client._is_vinyl_position("C10") is True
-        assert client._is_vinyl_position("a1") is True  # lowercase
+    def test_vinyl_positions(self):
+        assert is_vinyl_position("A1") is True
+        assert is_vinyl_position("B2") is True
+        assert is_vinyl_position("C10") is True
+        assert is_vinyl_position("a1") is True
 
-    def test_non_vinyl_positions(self, client):
-        """Should not identify non-vinyl positions as vinyl."""
-        assert client._is_vinyl_position("1") is False
-        assert client._is_vinyl_position("12") is False
-        assert client._is_vinyl_position("1-1") is False
-        assert client._is_vinyl_position("CD1-1") is False
-        assert client._is_vinyl_position("") is False
+    def test_non_vinyl_positions(self):
+        assert is_vinyl_position("1") is False
+        assert is_vinyl_position("12") is False
+        assert is_vinyl_position("1-1") is False
+        assert is_vinyl_position("CD1-1") is False
+        assert is_vinyl_position("") is False

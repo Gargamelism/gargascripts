@@ -11,6 +11,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from discogs_client import DiscogsClient
+from discogs_client.parsing import parse_position, parse_release
 from models import DiscogsRelease, DiscogsTrack
 
 
@@ -177,7 +178,7 @@ class TestParseRelease:
             {"type_": "track", "position": "1", "title": "One"},
             {"type_": "track", "position": "2", "title": "Two"},
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert len(release.tracklist) == 2
         assert release.tracklist[0].track_number == 1
         assert release.tracklist[1].track_number == 2
@@ -188,7 +189,7 @@ class TestParseRelease:
             {"type_": "track", "position": "A2", "title": "Side A Track 2"},
             {"type_": "track", "position": "B1", "title": "Side B Track 1"},
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert len(release.tracklist) == 3
         # All on disc 1 (sides A and B)
         assert all(t.disc_number == 1 for t in release.tracklist)
@@ -203,7 +204,7 @@ class TestParseRelease:
             {"type_": "track", "position": "C1", "title": "C1"},  # disc 2
             {"type_": "track", "position": "D1", "title": "D1"},  # disc 2
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         discs = {t.disc_number for t in release.tracklist}
         assert 1 in discs
         assert 2 in discs
@@ -213,19 +214,19 @@ class TestParseRelease:
             {"type_": "heading", "position": "", "title": "Side A"},
             {"type_": "track", "position": "1", "title": "Real Track"},
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert len(release.tracklist) == 1
 
     def test_handles_no_labels(self, client):
         data = _release_data()
         data["labels"] = []
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert release.label is None
 
     def test_strips_artist_numbering(self, client):
         data = _release_data()
         data["artists"] = [{"name": "Artist (2)"}]
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert release.artists == ["Artist"]
 
     def test_mixed_vinyl_and_non_vinyl(self, client):
@@ -233,7 +234,7 @@ class TestParseRelease:
             {"type_": "track", "position": "A1", "title": "Vinyl"},
             {"type_": "track", "position": "5", "title": "NonVinyl"},
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert len(release.tracklist) == 2
 
     def test_disc_track_format(self, client):
@@ -242,7 +243,7 @@ class TestParseRelease:
             {"type_": "track", "position": "1-2", "title": "D1T2"},
             {"type_": "track", "position": "2-1", "title": "D2T1"},
         ])
-        release = client._parse_release(data)
+        release = parse_release(data)
         assert release.total_discs == 2
         assert release.tracklist[2].disc_number == 2
 
@@ -252,25 +253,25 @@ class TestParseRelease:
 # ---------------------------------------------------------------------------
 
 class TestParsePosition:
-    def test_simple_number(self, client):
-        assert client._parse_position("3") == (3, 1)
+    def test_simple_number(self):
+        assert parse_position("3") == (3, 1)
 
-    def test_disc_track_format(self, client):
-        assert client._parse_position("2-5") == (5, 2)
+    def test_disc_track_format(self):
+        assert parse_position("2-5") == (5, 2)
 
-    def test_cd_format(self, client):
-        assert client._parse_position("CD2-3") == (3, 2)
+    def test_cd_format(self):
+        assert parse_position("CD2-3") == (3, 2)
 
-    def test_vinyl_format(self, client):
-        track, disc = client._parse_position("B2")
+    def test_vinyl_format(self):
+        track, disc = parse_position("B2")
         assert track == 2
         assert disc == 1
 
-    def test_empty_returns_none_none(self, client):
-        assert client._parse_position("") == (None, None)
+    def test_empty_returns_none_none(self):
+        assert parse_position("") == (None, None)
 
-    def test_unrecognized_returns_none_none(self, client):
-        assert client._parse_position("???") == (None, None)
+    def test_unrecognized_returns_none_none(self):
+        assert parse_position("???") == (None, None)
 
 
 # ---------------------------------------------------------------------------

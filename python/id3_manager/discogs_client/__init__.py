@@ -80,7 +80,7 @@ class DiscogsClient:
             )
             resp.raise_for_status()
             self._update_rate_limit(resp)
-            return self._parse_release(resp.json())
+            return _parsing.parse_release(resp.json())
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 eprint(
@@ -147,15 +147,3 @@ class DiscogsClient:
 
         return None
 
-    # Shims so tests using client._parse_release / client._parse_position etc. keep working
-    def _parse_release(self, data: dict) -> DiscogsRelease:
-        return _parsing.parse_release(data)
-
-    def _is_vinyl_position(self, position: str) -> bool:
-        return _parsing.is_vinyl_position(position)
-
-    def _parse_vinyl_position(self, position: str) -> tuple:
-        return _parsing.parse_vinyl_position(position)
-
-    def _parse_position(self, position: str) -> tuple:
-        return _parsing.parse_position(position)

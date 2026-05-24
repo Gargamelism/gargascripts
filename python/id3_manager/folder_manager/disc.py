@@ -10,6 +10,13 @@ from sync_results import CommitResult
 from folder_manager.naming import generate_disc_folder_name, generate_folder_name
 
 
+DISC_PATTERNS = [
+    r"(?:cd|disc|disk)\s*(\d+)",
+    r"^(\d+)$",
+    r"d(\d+)",
+]
+
+
 def extract_disc_number(patterns: list, folder_name: str) -> Optional[int]:
     folder_name_lower = folder_name.lower()
     for pattern in patterns:
@@ -29,7 +36,7 @@ def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
 
     disc_folders = []
     for subfolder in subfolders:
-        disc_num = fm._extract_disc_number(subfolder.name)
+        disc_num = extract_disc_number(fm.DISC_PATTERNS,subfolder.name)
         if disc_num is not None:
             disc_folders.append((disc_num, subfolder))
 
@@ -49,13 +56,13 @@ def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
 
 def infer_disc_info_from_path(fm, file_path: str) -> Optional[Tuple[int, int]]:
     parent = Path(file_path).parent
-    disc_num = fm._extract_disc_number(parent.name)
+    disc_num = extract_disc_number(fm.DISC_PATTERNS,parent.name)
     if disc_num is None:
         return None
     grandparent = parent.parent
     sibling_disc_count = sum(
         1 for d in grandparent.iterdir()
-        if d.is_dir() and fm._extract_disc_number(d.name) is not None
+        if d.is_dir() and extract_disc_number(fm.DISC_PATTERNS,d.name) is not None
     )
     return (disc_num, sibling_disc_count) if sibling_disc_count >= 2 else None
 

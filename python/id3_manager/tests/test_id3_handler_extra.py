@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from id3_handler import ID3Handler
+from id3_handler.formats import get_tag_str, get_mp4_tag, MP4_TAGS
 from models import TrackMetadata
 
 # ---------------------------------------------------------------------------
@@ -456,48 +457,35 @@ class TestWriteTagsPreserveExisting:
 
 class TestGetTagStr:
     def test_returns_string_value(self):
-        handler = ID3Handler()
         mock_tag = MagicMock()
         mock_tag.__getitem__ = lambda s, i: "Hello"
         mock_tag.__str__ = lambda s: "Hello"
         tags = {"TIT2": mock_tag}
-        result = handler._get_tag_str(tags, "TIT2")
+        result = get_tag_str(tags, "TIT2")
         assert result is not None
 
     def test_returns_none_for_missing_key(self):
-        handler = ID3Handler()
-        result = handler._get_tag_str({}, "TIT2")
-        assert result is None
+        assert get_tag_str({}, "TIT2") is None
 
 
 class TestGetMp4Tag:
     def test_returns_first_list_item(self):
-        handler = ID3Handler()
         tags = {"\xa9nam": ["My Title"]}
-        result = handler._get_mp4_tag(tags, "title")
-        assert result == "My Title"
+        assert get_mp4_tag(tags, "title", MP4_TAGS) == "My Title"
 
     def test_returns_none_for_missing_key(self):
-        handler = ID3Handler()
-        result = handler._get_mp4_tag({}, "title")
-        assert result is None
+        assert get_mp4_tag({}, "title", MP4_TAGS) is None
 
     def test_returns_none_for_none_value(self):
-        handler = ID3Handler()
         tags = {"\xa9nam": [None]}
-        result = handler._get_mp4_tag(tags, "title")
-        assert result is None
+        assert get_mp4_tag(tags, "title", MP4_TAGS) is None
 
     def test_returns_none_for_empty_list(self):
-        handler = ID3Handler()
         tags = {"\xa9nam": []}
-        result = handler._get_mp4_tag(tags, "title")
-        assert result is None
+        assert get_mp4_tag(tags, "title", MP4_TAGS) is None
 
     def test_returns_none_for_unknown_key(self):
-        handler = ID3Handler()
-        result = handler._get_mp4_tag({"\xa9nam": ["x"]}, "nonexistent_key")
-        assert result is None
+        assert get_mp4_tag({"\xa9nam": ["x"]}, "nonexistent_key", MP4_TAGS) is None
 
 
 # ---------------------------------------------------------------------------

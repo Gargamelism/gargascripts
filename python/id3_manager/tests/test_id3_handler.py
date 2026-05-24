@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from id3_handler import ID3Handler
+from id3_handler.formats import parse_track_disc, parse_year
 from models import TrackMetadata
 
 
@@ -20,77 +21,64 @@ def handler():
 
 
 class TestParseTrackDisc:
-    """Tests for _parse_track_disc method."""
+    """Tests for parse_track_disc."""
 
-    def test_parses_track_with_total(self, handler):
-        """Should parse '3/12' format into (track, total)."""
-        num, total = handler._parse_track_disc("3/12")
+    def test_parses_track_with_total(self):
+        num, total = parse_track_disc("3/12")
         assert num == 3
         assert total == 12
 
-    def test_parses_track_only(self, handler):
-        """Should parse single number as (track, None)."""
-        num, total = handler._parse_track_disc("5")
+    def test_parses_track_only(self):
+        num, total = parse_track_disc("5")
         assert num == 5
         assert total is None
 
-    def test_handles_empty_string(self, handler):
-        """Should return (None, None) for empty string."""
-        num, total = handler._parse_track_disc("")
+    def test_handles_empty_string(self):
+        num, total = parse_track_disc("")
         assert num is None
         assert total is None
 
-    def test_handles_invalid_format(self, handler):
-        """Should return (None, None) for invalid format."""
-        num, total = handler._parse_track_disc("invalid")
+    def test_handles_invalid_format(self):
+        num, total = parse_track_disc("invalid")
         assert num is None
         assert total is None
 
-    def test_handles_partial_slash(self, handler):
-        """Should handle '5/' format."""
-        num, total = handler._parse_track_disc("5/")
+    def test_handles_partial_slash(self):
+        num, total = parse_track_disc("5/")
         assert num == 5
         assert total is None
 
-    def test_handles_spaces(self, handler):
-        """Should handle spaces in input."""
-        num, total = handler._parse_track_disc(" 3 / 12 ")
+    def test_handles_spaces(self):
+        num, total = parse_track_disc(" 3 / 12 ")
         assert num == 3
         assert total == 12
 
-    def test_handles_zero(self, handler):
-        """Should handle zero values."""
-        num, total = handler._parse_track_disc("0/10")
+    def test_handles_zero(self):
+        num, total = parse_track_disc("0/10")
         assert num == 0
         assert total == 10
 
 
 class TestParseYear:
-    """Tests for _parse_year method."""
+    """Tests for parse_year."""
 
-    def test_parses_four_digit_year(self, handler):
-        """Should parse simple year string."""
-        assert handler._parse_year("2020") == 2020
-        assert handler._parse_year("1999") == 1999
+    def test_parses_four_digit_year(self):
+        assert parse_year("2020") == 2020
+        assert parse_year("1999") == 1999
 
-    def test_parses_full_date(self, handler):
-        """Should extract year from YYYY-MM-DD format."""
-        assert handler._parse_year("2020-01-15") == 2020
-        assert handler._parse_year("1985-12-25") == 1985
+    def test_parses_full_date(self):
+        assert parse_year("2020-01-15") == 2020
+        assert parse_year("1985-12-25") == 1985
 
-    def test_handles_empty_string(self, handler):
-        """Should return None for empty string."""
-        assert handler._parse_year("") is None
+    def test_handles_empty_string(self):
+        assert parse_year("") is None
 
-    def test_handles_none_like_values(self, handler):
-        """Should handle various null-like inputs."""
-        assert handler._parse_year("") is None
+    def test_handles_none_like_values(self):
+        assert parse_year("") is None
 
-    def test_handles_invalid_year(self, handler):
-        """Should return None for invalid year format."""
-        assert handler._parse_year("abc") is None
-        # Note: "20" returns 20 because _parse_year takes first 4 chars and int("20") = 20
-        # This is acceptable behavior - it's a best-effort parser
+    def test_handles_invalid_year(self):
+        assert parse_year("abc") is None
+        # "20" returns 20 — best-effort parser takes first 4 chars
 
 
 class TestIsSupported:

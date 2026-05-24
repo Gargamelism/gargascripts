@@ -58,28 +58,28 @@ class ID3Handler:
     def _read_mp3_tags(self, file_path: str) -> TrackMetadata:
         audio = MP3(file_path)
         tags = audio.tags or {}
-        track_num, total_tracks = self._parse_track_disc(
+        track_num, total_tracks = _parse_track_disc(
             str(tags.get("TRCK", [""])[0]) if tags.get("TRCK") else ""
         )
-        disc_num, total_discs = self._parse_track_disc(
+        disc_num, total_discs = _parse_track_disc(
             str(tags.get("TPOS", [""])[0]) if tags.get("TPOS") else ""
         )
         return TrackMetadata(
-            title=self._get_tag_str(tags, "TIT2"),
-            artist=self._get_tag_str(tags, "TPE1"),
-            album=self._get_tag_str(tags, "TALB"),
-            album_artist=self._get_tag_str(tags, "TPE2"),
+            title=_get_tag_str(tags, "TIT2"),
+            artist=_get_tag_str(tags, "TPE1"),
+            album=_get_tag_str(tags, "TALB"),
+            album_artist=_get_tag_str(tags, "TPE2"),
             track_number=track_num,
             total_tracks=total_tracks,
             disc_number=disc_num,
             total_discs=total_discs,
-            year=self._parse_year(self._get_tag_str(tags, "TDRC")),
-            genre=self._get_tag_str(tags, "TCON"),
+            year=_parse_year(_get_tag_str(tags, "TDRC")),
+            genre=_get_tag_str(tags, "TCON"),
         )
 
     def _read_flac_tags(self, file_path: str) -> TrackMetadata:
         audio = FLAC(file_path)
-        track_num, total_tracks = self._parse_track_disc(
+        track_num, total_tracks = _parse_track_disc(
             audio.get("tracknumber", [""])[0]
         )
         if total_tracks is None:
@@ -89,7 +89,7 @@ class ID3Handler:
                     total_tracks = int(total_str)
                 except ValueError:
                     pass
-        disc_num, total_discs = self._parse_track_disc(
+        disc_num, total_discs = _parse_track_disc(
             audio.get("discnumber", [""])[0]
         )
         if total_discs is None:
@@ -108,7 +108,7 @@ class ID3Handler:
             total_tracks=total_tracks,
             disc_number=disc_num,
             total_discs=total_discs,
-            year=self._parse_year(audio.get("date", [""])[0]),
+            year=_parse_year(audio.get("date", [""])[0]),
             genre=audio.get("genre", [None])[0],
         )
 
@@ -122,16 +122,16 @@ class ID3Handler:
         disc_num = disc_info[0] if disc_info and disc_info[0] else None
         total_discs = disc_info[1] if disc_info and len(disc_info) > 1 and disc_info[1] else None
         return TrackMetadata(
-            title=self._get_mp4_tag(tags, "title"),
-            artist=self._get_mp4_tag(tags, "artist"),
-            album=self._get_mp4_tag(tags, "album"),
-            album_artist=self._get_mp4_tag(tags, "album_artist"),
+            title=_get_mp4_tag(tags, "title", _MP4_TAGS),
+            artist=_get_mp4_tag(tags, "artist", _MP4_TAGS),
+            album=_get_mp4_tag(tags, "album", _MP4_TAGS),
+            album_artist=_get_mp4_tag(tags, "album_artist", _MP4_TAGS),
             track_number=track_num,
             total_tracks=total_tracks,
             disc_number=disc_num,
             total_discs=total_discs,
-            year=self._parse_year(self._get_mp4_tag(tags, "year") or ""),
-            genre=self._get_mp4_tag(tags, "genre"),
+            year=_parse_year(_get_mp4_tag(tags, "year", _MP4_TAGS) or ""),
+            genre=_get_mp4_tag(tags, "genre", _MP4_TAGS),
         )
 
     def write_tags(self, file_path: str, metadata: TrackMetadata,
@@ -219,14 +219,3 @@ class ID3Handler:
         audio.save()
         return True
 
-    def _get_tag_str(self, tags: dict, key: str) -> Optional[str]:
-        return _get_tag_str(tags, key)
-
-    def _get_mp4_tag(self, tags: dict, key: str) -> Optional[str]:
-        return _get_mp4_tag(tags, key, self.MP4_TAGS)
-
-    def _parse_track_disc(self, value: str) -> tuple:
-        return _parse_track_disc(value)
-
-    def _parse_year(self, value: str) -> Optional[int]:
-        return _parse_year(value)
