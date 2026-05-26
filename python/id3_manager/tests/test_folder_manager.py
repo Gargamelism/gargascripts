@@ -50,6 +50,9 @@ class TestSanitizeName:
         result = sanitize_name("Test___Name")
         assert "___" not in result
 
+    def test_trailing_invalid_char_leaves_no_trailing_space(self):
+        assert sanitize_name("Who Me?") == "Who Me"
+
 
 class TestGenerateFilename:
     """Tests for generate_filename method."""
@@ -128,8 +131,12 @@ class TestGenerateFilename:
 
     def test_different_extensions(self, folder_manager, sample_metadata):
         """Should work with different file extensions."""
-        assert folder_manager.generate_filename(sample_metadata, ".flac").endswith(".flac")
-        assert folder_manager.generate_filename(sample_metadata, ".m4a").endswith(".m4a")
+        assert folder_manager.generate_filename(sample_metadata, ".flac").endswith(
+            ".flac"
+        )
+        assert folder_manager.generate_filename(sample_metadata, ".m4a").endswith(
+            ".m4a"
+        )
 
 
 class TestShouldRenameFile:
@@ -151,7 +158,9 @@ class TestShouldRenameFile:
         )
         assert result is False
 
-    def test_returns_false_when_metadata_incomplete(self, folder_manager, incomplete_metadata):
+    def test_returns_false_when_metadata_incomplete(
+        self, folder_manager, incomplete_metadata
+    ):
         """Should return False when metadata is incomplete."""
         result = folder_manager.should_rename_file(
             "/path/to/any_file.mp3",
@@ -189,7 +198,10 @@ class TestIsFolderProperlyNamed:
 
     def test_matches_year_album_format(self, folder_manager):
         """Should return True for {YEAR} - {ALBUM} format."""
-        assert folder_manager.is_folder_properly_named("/path/to/2020 - Album Name") is True
+        assert (
+            folder_manager.is_folder_properly_named("/path/to/2020 - Album Name")
+            is True
+        )
 
     def test_matches_various_years(self, folder_manager):
         """Should match different year values."""
@@ -199,7 +211,9 @@ class TestIsFolderProperlyNamed:
     def test_rejects_wrong_format(self, folder_manager):
         """Should return False for wrong formats."""
         assert folder_manager.is_folder_properly_named("/path/to/Album Name") is False
-        assert folder_manager.is_folder_properly_named("/path/to/Artist - Album") is False
+        assert (
+            folder_manager.is_folder_properly_named("/path/to/Artist - Album") is False
+        )
         assert folder_manager.is_folder_properly_named("/path/to/20 - Album") is False
 
 
@@ -264,17 +278,17 @@ class TestDetectMultiDiscFromMetadata:
             AudioFile(
                 file_path="/path/file1.mp3",
                 format="mp3",
-                current_tags=TrackMetadata(disc_number=1)
+                current_tags=TrackMetadata(disc_number=1),
             ),
             AudioFile(
                 file_path="/path/file2.mp3",
                 format="mp3",
-                current_tags=TrackMetadata(disc_number=2)
+                current_tags=TrackMetadata(disc_number=2),
             ),
             AudioFile(
                 file_path="/path/file3.mp3",
                 format="mp3",
-                current_tags=TrackMetadata(disc_number=3)
+                current_tags=TrackMetadata(disc_number=3),
             ),
         ]
         assert folder_manager.detect_multi_disc_from_metadata(files) == 3
@@ -287,7 +301,7 @@ class TestDetectMultiDiscFromMetadata:
             AudioFile(
                 file_path="/path/file1.mp3",
                 format="mp3",
-                current_tags=TrackMetadata(disc_number=1, total_discs=5)
+                current_tags=TrackMetadata(disc_number=1, total_discs=5),
             ),
         ]
         assert folder_manager.detect_multi_disc_from_metadata(files) == 5
@@ -298,9 +312,7 @@ class TestDetectMultiDiscFromMetadata:
 
         files = [
             AudioFile(
-                file_path="/path/file1.mp3",
-                format="mp3",
-                current_tags=TrackMetadata()
+                file_path="/path/file1.mp3", format="mp3", current_tags=TrackMetadata()
             ),
         ]
         assert folder_manager.detect_multi_disc_from_metadata(files) == 1
@@ -317,7 +329,7 @@ class TestGetAlbumInfoFromFiles:
             AudioFile(
                 file_path="/path/file1.mp3",
                 format="mp3",
-                current_tags=TrackMetadata(year=2020, album="Test Album")
+                current_tags=TrackMetadata(year=2020, album="Test Album"),
             ),
         ]
         year, album = folder_manager.get_album_info_from_files(files)
@@ -346,9 +358,7 @@ class TestGetAlbumInfoFromFiles:
 
         files = [
             AudioFile(
-                file_path="/path/file1.mp3",
-                format="mp3",
-                current_tags=TrackMetadata()
+                file_path="/path/file1.mp3", format="mp3", current_tags=TrackMetadata()
             ),
         ]
         year, album = folder_manager.get_album_info_from_files(files)
@@ -397,9 +407,7 @@ class TestNormalizeDiscFolderName:
 
     def test_already_correct_name_returns_same_path(self, folder_manager):
         """Should return same path when folder already named CD{N}."""
-        result = folder_manager.normalize_disc_folder_name(
-            "/path/to/album/CD1", 1
-        )
+        result = folder_manager.normalize_disc_folder_name("/path/to/album/CD1", 1)
         assert result.success is True
         assert result.message == "/path/to/album/CD1"
 
@@ -461,9 +469,13 @@ class TestNormalizeDiscFolderName:
 class TestOneDriveMirroring:
     """Rename/move operations mirror to OneDrive before committing locally."""
 
-    def _mock_sync(self, success: bool = True, message: str = "ok", mode: str = "moveto"):
+    def _mock_sync(
+        self, success: bool = True, message: str = "ok", mode: str = "moveto"
+    ):
         sync = MagicMock()
-        sync.moveto.return_value = MoveResult(success=success, message=message, mode=mode)
+        sync.moveto.return_value = MoveResult(
+            success=success, message=message, mode=mode
+        )
         return sync
 
     def test_rename_audio_file_mirrors_before_local(self, tmp_path):

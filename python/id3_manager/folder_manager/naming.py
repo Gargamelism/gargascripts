@@ -14,8 +14,8 @@ def sanitize_name(name: str) -> str:
     invalid_chars = '<>:"/\\|?*'
     for char in invalid_chars:
         name = name.replace(char, "_")
-    name = name.strip(". ")
     name = re.sub(r"[_\s]+", " ", name)
+    name = name.strip(". ")
     return unicodedata.normalize("NFC", name)
 
 
