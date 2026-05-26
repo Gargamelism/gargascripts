@@ -1,16 +1,10 @@
 
-what is fm in def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
-why does it call a private method disc_num = fm._extract_disc_number(subfolder.name)
-disc_num = fm._extract_disc_number(parent.name)
-mirror = fm._mirror_rename(current, new_path, dry_run)
-return fm._commit_with_rollback(
-
-what is encoding 3 audio.tags.add(TRCK(encoding=3, text=track_str))
 
 args and config should be typedclass ID3Processor:
     """Main processor for ID3 tag management."""
 
     def __init__(self, config: dict, args, prompts: InteractivePrompts):
+
 
 what is proc def process_files(proc, audio_files: List[AudioFile]) -> None:
 why is it calling private methods like proc._process_file(audio_file) and proc._finalize()?

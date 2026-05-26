@@ -3,11 +3,10 @@
 from pathlib import Path
 from typing import Optional
 
-from mutagen import File
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TRCK, TPOS, TDRC, TCON
+from mutagen.id3 import TIT2, TPE1, TALB, TPE2, TRCK, TPOS, TDRC, TCON
 
 from config import eprint
 from models import TrackMetadata
@@ -19,6 +18,8 @@ from id3_handler.formats import (
     get_mp4_tag as _get_mp4_tag,
 )
 from id3_handler.backup import SafeWriter
+
+ID3_ENCODING_UTF8 = 3
 
 
 class ID3Handler:
@@ -79,9 +80,7 @@ class ID3Handler:
 
     def _read_flac_tags(self, file_path: str) -> TrackMetadata:
         audio = FLAC(file_path)
-        track_num, total_tracks = _parse_track_disc(
-            audio.get("tracknumber", [""])[0]
-        )
+        track_num, total_tracks = _parse_track_disc(audio.get("tracknumber", [""])[0])
         if total_tracks is None:
             total_str = audio.get("totaltracks", [""])[0]
             if total_str:
@@ -89,9 +88,7 @@ class ID3Handler:
                     total_tracks = int(total_str)
                 except ValueError:
                     pass
-        disc_num, total_discs = _parse_track_disc(
-            audio.get("discnumber", [""])[0]
-        )
+        disc_num, total_discs = _parse_track_disc(audio.get("discnumber", [""])[0])
         if total_discs is None:
             total_str = audio.get("totaldiscs", [""])[0]
             if total_str:
@@ -118,9 +115,15 @@ class ID3Handler:
         track_info = tags.get(self.MP4_TAGS["track"], [(None, None)])[0]
         disc_info = tags.get(self.MP4_TAGS["disc"], [(None, None)])[0]
         track_num = track_info[0] if track_info and track_info[0] else None
-        total_tracks = track_info[1] if track_info and len(track_info) > 1 and track_info[1] else None
+        total_tracks = (
+            track_info[1]
+            if track_info and len(track_info) > 1 and track_info[1]
+            else None
+        )
         disc_num = disc_info[0] if disc_info and disc_info[0] else None
-        total_discs = disc_info[1] if disc_info and len(disc_info) > 1 and disc_info[1] else None
+        total_discs = (
+            disc_info[1] if disc_info and len(disc_info) > 1 and disc_info[1] else None
+        )
         return TrackMetadata(
             title=_get_mp4_tag(tags, "title", _MP4_TAGS),
             artist=_get_mp4_tag(tags, "artist", _MP4_TAGS),
@@ -134,8 +137,9 @@ class ID3Handler:
             genre=_get_mp4_tag(tags, "genre", _MP4_TAGS),
         )
 
-    def write_tags(self, file_path: str, metadata: TrackMetadata,
-                   preserve_existing: bool = True) -> bool:
+    def write_tags(
+        self, file_path: str, metadata: TrackMetadata, preserve_existing: bool = True
+    ) -> bool:
         return self._writer.write(self, file_path, metadata, preserve_existing)
 
     def _write_mp3_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
@@ -143,27 +147,27 @@ class ID3Handler:
         if audio.tags is None:
             audio.add_tags()
         if metadata.title:
-            audio.tags.add(TIT2(encoding=3, text=metadata.title))
+            audio.tags.add(TIT2(encoding=ID3_ENCODING_UTF8, text=metadata.title))
         if metadata.artist:
-            audio.tags.add(TPE1(encoding=3, text=metadata.artist))
+            audio.tags.add(TPE1(encoding=ID3_ENCODING_UTF8, text=metadata.artist))
         if metadata.album:
-            audio.tags.add(TALB(encoding=3, text=metadata.album))
+            audio.tags.add(TALB(encoding=ID3_ENCODING_UTF8, text=metadata.album))
         if metadata.album_artist:
-            audio.tags.add(TPE2(encoding=3, text=metadata.album_artist))
+            audio.tags.add(TPE2(encoding=ID3_ENCODING_UTF8, text=metadata.album_artist))
         if metadata.track_number:
             track_str = str(metadata.track_number)
             if metadata.total_tracks:
                 track_str += f"/{metadata.total_tracks}"
-            audio.tags.add(TRCK(encoding=3, text=track_str))
+            audio.tags.add(TRCK(encoding=ID3_ENCODING_UTF8, text=track_str))
         if metadata.disc_number:
             disc_str = str(metadata.disc_number)
             if metadata.total_discs:
                 disc_str += f"/{metadata.total_discs}"
-            audio.tags.add(TPOS(encoding=3, text=disc_str))
+            audio.tags.add(TPOS(encoding=ID3_ENCODING_UTF8, text=disc_str))
         if metadata.year:
-            audio.tags.add(TDRC(encoding=3, text=str(metadata.year)))
+            audio.tags.add(TDRC(encoding=ID3_ENCODING_UTF8, text=str(metadata.year)))
         if metadata.genre:
-            audio.tags.add(TCON(encoding=3, text=metadata.genre))
+            audio.tags.add(TCON(encoding=ID3_ENCODING_UTF8, text=metadata.genre))
         audio.save()
         return True
 
@@ -218,4 +222,3 @@ class ID3Handler:
             audio.tags[self.MP4_TAGS["genre"]] = [metadata.genre]
         audio.save()
         return True
-

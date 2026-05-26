@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from id3_handler import ID3Handler
+from id3_handler import ID3Handler, ID3_ENCODING_UTF8
 from id3_handler.formats import get_tag_str, get_mp4_tag, MP4_TAGS
 from models import TrackMetadata
 
@@ -16,13 +16,20 @@ from models import TrackMetadata
 # Helpers to create minimal real audio files
 # ---------------------------------------------------------------------------
 
+
 def make_mp3(path: Path):
     """Write a minimal valid MP3 (silence) using mutagen."""
     # Minimal MP3: a single silent MPEG frame (Layer III, 128kbps, 44100Hz, stereo)
     # Frame sync + header bytes
-    silent_frame = bytes([
-        0xFF, 0xFB, 0x90, 0x00,  # sync + header (MPEG1 Layer3 128k 44100 stereo)
-    ] + [0x00] * 413)  # silence payload
+    silent_frame = bytes(
+        [
+            0xFF,
+            0xFB,
+            0x90,
+            0x00,  # sync + header (MPEG1 Layer3 128k 44100 stereo)
+        ]
+        + [0x00] * 413
+    )  # silence payload
     # Write multiple frames so mutagen can sync
     path.write_bytes(silent_frame * 10)
 
@@ -31,6 +38,7 @@ def make_mp3_with_mutagen(path: Path, metadata: TrackMetadata = None):
     """Create a valid tagged MP3 using mutagen itself."""
     from mutagen.mp3 import MP3
     from mutagen.id3 import TIT2, TPE1, TALB, TRCK, TDRC
+
     # Start from a minimal raw frame so the file is parseable
     make_mp3(path)
     try:
@@ -39,18 +47,20 @@ def make_mp3_with_mutagen(path: Path, metadata: TrackMetadata = None):
             audio.add_tags()
         if metadata:
             if metadata.title:
-                audio.tags.add(TIT2(encoding=3, text=metadata.title))
+                audio.tags.add(TIT2(encoding=ID3_ENCODING_UTF8, text=metadata.title))
             if metadata.artist:
-                audio.tags.add(TPE1(encoding=3, text=metadata.artist))
+                audio.tags.add(TPE1(encoding=ID3_ENCODING_UTF8, text=metadata.artist))
             if metadata.album:
-                audio.tags.add(TALB(encoding=3, text=metadata.album))
+                audio.tags.add(TALB(encoding=ID3_ENCODING_UTF8, text=metadata.album))
             if metadata.track_number:
                 ts = str(metadata.track_number)
                 if metadata.total_tracks:
                     ts += f"/{metadata.total_tracks}"
-                audio.tags.add(TRCK(encoding=3, text=ts))
+                audio.tags.add(TRCK(encoding=ID3_ENCODING_UTF8, text=ts))
             if metadata.year:
-                audio.tags.add(TDRC(encoding=3, text=str(metadata.year)))
+                audio.tags.add(
+                    TDRC(encoding=ID3_ENCODING_UTF8, text=str(metadata.year))
+                )
         audio.save()
     except Exception:
         pass  # minimal file is still valid for read_tags calls
@@ -59,6 +69,7 @@ def make_mp3_with_mutagen(path: Path, metadata: TrackMetadata = None):
 def make_flac(path: Path, metadata: TrackMetadata = None):
     """Create a minimal valid FLAC file."""
     from mutagen.flac import FLAC
+
     # Use mutagen to create a minimal FLAC from scratch
     # Minimum: FLAC marker + STREAMINFO block
     # Build via mutagen by creating empty FLAC
@@ -100,6 +111,7 @@ def _write_minimal_flac(path: Path):
 def make_m4a(path: Path, metadata: TrackMetadata = None):
     """Create a minimal valid M4A via mutagen MP4."""
     from mutagen.mp4 import MP4
+
     try:
         audio = MP4()
         if audio.tags is None:
@@ -117,6 +129,7 @@ def make_m4a(path: Path, metadata: TrackMetadata = None):
 # ---------------------------------------------------------------------------
 # MP3 round-trip tests
 # ---------------------------------------------------------------------------
+
 
 class TestReadMp3Tags:
     def test_reads_tags_from_mp3(self, tmp_path):
@@ -149,13 +162,14 @@ class TestReadMp3Tags:
     def test_reads_disc_info_from_mp3(self, tmp_path):
         from mutagen.mp3 import MP3
         from mutagen.id3 import TPOS
+
         f = tmp_path / "disc.mp3"
         make_mp3(f)
         try:
             audio = MP3(str(f))
             if audio.tags is None:
                 audio.add_tags()
-            audio.tags.add(TPOS(encoding=3, text="2/3"))
+            audio.tags.add(TPOS(encoding=ID3_ENCODING_UTF8, text="2/3"))
             audio.save()
         except Exception:
             return
@@ -168,6 +182,7 @@ class TestReadMp3Tags:
 # ---------------------------------------------------------------------------
 # FLAC round-trip tests
 # ---------------------------------------------------------------------------
+
 
 class TestReadFlacTags:
     def test_reads_tags_from_flac(self, tmp_path):
@@ -253,6 +268,7 @@ class TestReadFlacTags:
 # M4A round-trip tests
 # ---------------------------------------------------------------------------
 
+
 class TestReadM4aTags:
     def test_reads_tags_from_m4a(self, tmp_path):
         f = tmp_path / "song.m4a"
@@ -296,6 +312,7 @@ class TestReadM4aTags:
 # ---------------------------------------------------------------------------
 # Write methods
 # ---------------------------------------------------------------------------
+
 
 class TestWriteTagsMethods:
     def test_write_mp3_tags_round_trip(self, tmp_path):
@@ -385,13 +402,16 @@ class TestWriteTagsMethods:
 # write_tags: preserve_existing and error branches
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTagsPreserveExisting:
     def test_merges_existing_with_new(self, tmp_path):
         f = tmp_path / "merge.mp3"
         f.write_bytes(b"dummy")
         handler = ID3Handler()
 
-        existing = TrackMetadata(title="Old Title", artist="Old Artist", album="Old Album")
+        existing = TrackMetadata(
+            title="Old Title", artist="Old Artist", album="Old Album"
+        )
         new_meta = TrackMetadata(title="New Title")
 
         read_call = [0]
@@ -400,8 +420,10 @@ class TestWriteTagsPreserveExisting:
             read_call[0] += 1
             return existing
 
-        with patch.object(handler, "read_tags", side_effect=mock_read), \
-             patch.object(handler, "_write_mp3_tags", return_value=True):
+        with (
+            patch.object(handler, "read_tags", side_effect=mock_read),
+            patch.object(handler, "_write_mp3_tags", return_value=True),
+        ):
             result = handler.write_tags(str(f), new_meta, preserve_existing=True)
 
         assert result is True
@@ -415,11 +437,17 @@ class TestWriteTagsPreserveExisting:
         handler = ID3Handler()
 
         # Pre-write read succeeds; _write_mp3_tags raises; restore write_bytes also fails
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch.object(handler, "_write_mp3_tags", side_effect=OSError("write error")), \
-             patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")), \
-             pytest.raises(RuntimeError):
-            handler.write_tags(str(f), TrackMetadata(title="T"), preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch.object(
+                handler, "_write_mp3_tags", side_effect=OSError("write error")
+            ),
+            patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")),
+            pytest.raises(RuntimeError),
+        ):
+            handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
 
     def test_write_false_restores_original(self, tmp_path):
         f = tmp_path / "writefail.mp3"
@@ -427,10 +455,13 @@ class TestWriteTagsPreserveExisting:
         f.write_bytes(orig)
         handler = ID3Handler()
 
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch.object(handler, "_write_mp3_tags", return_value=False):
-            result = handler.write_tags(str(f), TrackMetadata(title="T"),
-                                        preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch.object(handler, "_write_mp3_tags", return_value=False),
+        ):
+            result = handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
 
         assert result is False
         assert f.read_bytes() == orig
@@ -441,14 +472,16 @@ class TestWriteTagsPreserveExisting:
         handler = ID3Handler()
 
         with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")):
-            result = handler.write_tags(str(f), TrackMetadata(title="T"),
-                                        preserve_existing=False)
+            result = handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
         assert result is False
 
 
 # ---------------------------------------------------------------------------
 # _get_tag_str / _get_mp4_tag helpers
 # ---------------------------------------------------------------------------
+
 
 class TestGetTagStr:
     def test_returns_string_value(self):
@@ -487,15 +520,19 @@ class TestGetMp4Tag:
 # write_tags — FLAC and M4A dispatch paths (lines 198, 200)
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTagsFormatDispatch:
     def test_write_tags_dispatches_flac(self, tmp_path):
         f = tmp_path / "song.flac"
         f.write_bytes(b"dummy")
         handler = ID3Handler()
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch.object(handler, "_write_flac_tags", return_value=True) as mock_w:
-            result = handler.write_tags(str(f), TrackMetadata(title="T"),
-                                        preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch.object(handler, "_write_flac_tags", return_value=True) as mock_w,
+        ):
+            result = handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
         mock_w.assert_called_once()
         assert result is True
 
@@ -503,10 +540,13 @@ class TestWriteTagsFormatDispatch:
         f = tmp_path / "song.m4a"
         f.write_bytes(b"dummy")
         handler = ID3Handler()
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch.object(handler, "_write_m4a_tags", return_value=True) as mock_w:
-            result = handler.write_tags(str(f), TrackMetadata(title="T"),
-                                        preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch.object(handler, "_write_m4a_tags", return_value=True) as mock_w,
+        ):
+            result = handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
         mock_w.assert_called_once()
         assert result is True
 
@@ -515,15 +555,21 @@ class TestWriteTagsFormatDispatch:
 # write_tags — backup read failure (lines 186-188)
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTagsBackupFailure:
     def test_backup_read_failure_returns_false(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.write_bytes(b"dummy")
         handler = ID3Handler()
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch("id3_handler.Path.read_bytes", side_effect=OSError("permission denied")):
-            result = handler.write_tags(str(f), TrackMetadata(title="T"),
-                                        preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch(
+                "id3_handler.Path.read_bytes", side_effect=OSError("permission denied")
+            ),
+        ):
+            result = handler.write_tags(
+                str(f), TrackMetadata(title="T"), preserve_existing=False
+            )
         assert result is False
 
 
@@ -531,23 +577,28 @@ class TestWriteTagsBackupFailure:
 # write_tags — restore failure after write returns False (lines 207-208)
 # ---------------------------------------------------------------------------
 
+
 class TestWriteTagsRestoreFailureAfterFalse:
     def test_restore_fails_after_write_returns_false_raises_runtime(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.write_bytes(b"original")
         handler = ID3Handler()
         # _write_mp3_tags returns False (write failed); restore write_bytes also fails
-        with patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")), \
-             patch.object(handler, "_write_mp3_tags", return_value=False), \
-             patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")):
+        with (
+            patch.object(handler, "read_tags", return_value=TrackMetadata(title="T")),
+            patch.object(handler, "_write_mp3_tags", return_value=False),
+            patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")),
+        ):
             with pytest.raises(RuntimeError, match="restore also failed"):
-                handler.write_tags(str(f), TrackMetadata(title="T"),
-                                   preserve_existing=False)
+                handler.write_tags(
+                    str(f), TrackMetadata(title="T"), preserve_existing=False
+                )
 
 
 # ---------------------------------------------------------------------------
 # write_tags — restore failure after post-write validation fails (lines 219-220)
 # ---------------------------------------------------------------------------
+
 
 class TestWriteTagsRestoreFailureAfterValidation:
     def test_restore_fails_after_validation_raises_runtime(self, tmp_path):
@@ -563,17 +614,21 @@ class TestWriteTagsRestoreFailureAfterValidation:
                 raise Exception("corrupted")
             return TrackMetadata(title="T")
 
-        with patch.object(handler, "read_tags", side_effect=mock_read), \
-             patch.object(handler, "_write_mp3_tags", return_value=True), \
-             patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")):
+        with (
+            patch.object(handler, "read_tags", side_effect=mock_read),
+            patch.object(handler, "_write_mp3_tags", return_value=True),
+            patch("id3_handler.Path.write_bytes", side_effect=OSError("disk full")),
+        ):
             with pytest.raises(RuntimeError, match="restore also failed"):
-                handler.write_tags(str(f), TrackMetadata(title="T"),
-                                   preserve_existing=False)
+                handler.write_tags(
+                    str(f), TrackMetadata(title="T"), preserve_existing=False
+                )
 
 
 # ---------------------------------------------------------------------------
 # _write_mp3_tags — album_artist field (line 255)
 # ---------------------------------------------------------------------------
+
 
 class TestWriteMp3TagsAlbumArtist:
     def test_writes_album_artist(self, tmp_path):
@@ -581,7 +636,9 @@ class TestWriteMp3TagsAlbumArtist:
         make_mp3(f)
         handler = ID3Handler()
         meta = TrackMetadata(
-            title="T", artist="A", album="B",
+            title="T",
+            artist="A",
+            album="B",
             album_artist="Various Artists",
             track_number=1,
         )
@@ -589,6 +646,7 @@ class TestWriteMp3TagsAlbumArtist:
             result = handler._write_mp3_tags(str(f), meta)
             assert result is True
             from mutagen.mp3 import MP3
+
             audio = MP3(str(f))
             assert audio.tags and "TPE2" in audio.tags
         except Exception:
@@ -598,6 +656,7 @@ class TestWriteMp3TagsAlbumArtist:
 # ---------------------------------------------------------------------------
 # _write_flac_tags — full body via mocks (lines 278-300)
 # ---------------------------------------------------------------------------
+
 
 class TestWriteFlacTagsMocked:
     def test_writes_all_fields_to_flac(self, tmp_path):
@@ -609,10 +668,16 @@ class TestWriteFlacTagsMocked:
         mock_audio.__setitem__ = MagicMock()
 
         meta = TrackMetadata(
-            title="FL", artist="A", album="B", album_artist="VA",
-            track_number=3, total_tracks=10,
-            disc_number=2, total_discs=3,
-            year=2020, genre="Rock",
+            title="FL",
+            artist="A",
+            album="B",
+            album_artist="VA",
+            track_number=3,
+            total_tracks=10,
+            disc_number=2,
+            total_discs=3,
+            year=2020,
+            genre="Rock",
         )
 
         with patch("id3_handler.FLAC", return_value=mock_audio):
@@ -654,6 +719,7 @@ class TestWriteFlacTagsMocked:
 # _write_m4a_tags — album_artist field (line 315)
 # ---------------------------------------------------------------------------
 
+
 class TestWriteM4aTagsAlbumArtist:
     def test_writes_album_artist(self, tmp_path):
         f = tmp_path / "aa.m4a"
@@ -663,7 +729,9 @@ class TestWriteM4aTagsAlbumArtist:
         mock_audio.tags = {}
 
         meta = TrackMetadata(
-            title="T", artist="A", album="B",
+            title="T",
+            artist="A",
+            album="B",
             album_artist="Various Artists",
             track_number=1,
         )
@@ -679,6 +747,7 @@ class TestWriteM4aTagsAlbumArtist:
 # read_tags dispatch
 # ---------------------------------------------------------------------------
 
+
 class TestReadTagsDispatch:
     def test_dispatches_to_read_mp3(self, tmp_path):
         f = tmp_path / "x.mp3"
@@ -692,7 +761,9 @@ class TestReadTagsDispatch:
         f = tmp_path / "x.flac"
         f.touch()
         handler = ID3Handler()
-        with patch.object(handler, "_read_flac_tags", return_value=TrackMetadata()) as m:
+        with patch.object(
+            handler, "_read_flac_tags", return_value=TrackMetadata()
+        ) as m:
             handler.read_tags(str(f))
         m.assert_called_once_with(str(f))
 
