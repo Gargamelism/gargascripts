@@ -1,8 +1,6 @@
 """Additional coverage tests for id3_handler.py — real file round-trips."""
 
 import sys
-import struct
-import io
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,8 +18,6 @@ from models import TrackMetadata
 
 def make_mp3(path: Path):
     """Write a minimal valid MP3 (silence) using mutagen."""
-    from mutagen.mp3 import MP3
-    from mutagen.id3 import ID3, TIT2
     # Minimal MP3: a single silent MPEG frame (Layer III, 128kbps, 44100Hz, stereo)
     # Frame sync + header bytes
     silent_frame = bytes([
@@ -34,7 +30,7 @@ def make_mp3(path: Path):
 def make_mp3_with_mutagen(path: Path, metadata: TrackMetadata = None):
     """Create a valid tagged MP3 using mutagen itself."""
     from mutagen.mp3 import MP3
-    from mutagen.id3 import ID3, TIT2, TPE1, TALB, TRCK, TDRC
+    from mutagen.id3 import TIT2, TPE1, TALB, TRCK, TDRC
     # Start from a minimal raw frame so the file is parseable
     make_mp3(path)
     try:
@@ -63,7 +59,6 @@ def make_mp3_with_mutagen(path: Path, metadata: TrackMetadata = None):
 def make_flac(path: Path, metadata: TrackMetadata = None):
     """Create a minimal valid FLAC file."""
     from mutagen.flac import FLAC
-    import subprocess
     # Use mutagen to create a minimal FLAC from scratch
     # Minimum: FLAC marker + STREAMINFO block
     # Build via mutagen by creating empty FLAC

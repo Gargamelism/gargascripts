@@ -1,6 +1,5 @@
 """Folder management for multi-disc detection and renaming."""
 
-import re
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -86,26 +85,39 @@ class FolderManager:
     def detect_multi_disc_from_metadata(self, audio_files: List[AudioFile]) -> int:
         return _disc.detect_multi_disc_from_metadata(audio_files)
 
-    def normalize_disc_folder_name(self, folder_path: str, disc_number: int,
-                                   dry_run: bool = False) -> CommitResult:
+    def normalize_disc_folder_name(
+        self, folder_path: str, disc_number: int, dry_run: bool = False
+    ) -> CommitResult:
         return _disc.normalize_disc_folder_name(self, folder_path, disc_number, dry_run)
 
-    def create_multi_disc_structure(self, source_folder: str, year: int,
-                                    album_name: str, total_discs: int,
-                                    dry_run: bool = False) -> Tuple[bool, str]:
-        return _disc.create_multi_disc_structure(self, source_folder, year, album_name,
-                                                  total_discs, dry_run)
+    def create_multi_disc_structure(
+        self,
+        source_folder: str,
+        year: int,
+        album_name: str,
+        total_discs: int,
+        dry_run: bool = False,
+    ) -> Tuple[bool, str]:
+        return _disc.create_multi_disc_structure(
+            self, source_folder, year, album_name, total_discs, dry_run
+        )
 
-    def move_file_to_disc_folder(self, file_path: str, disc_folder: str,
-                                 dry_run: bool = False) -> CommitResult:
+    def move_file_to_disc_folder(
+        self, file_path: str, disc_folder: str, dry_run: bool = False
+    ) -> CommitResult:
         return _disc.move_file_to_disc_folder(self, file_path, disc_folder, dry_run)
 
-    def reorganize_multi_disc_album(self, folder_path: str,
-                                    audio_files: List[AudioFile],
-                                    year: int, album_name: str,
-                                    dry_run: bool = False) -> Tuple[bool, str]:
-        return _disc.reorganize_multi_disc_album(self, folder_path, audio_files,
-                                                  year, album_name, dry_run)
+    def reorganize_multi_disc_album(
+        self,
+        folder_path: str,
+        audio_files: List[AudioFile],
+        year: int,
+        album_name: str,
+        dry_run: bool = False,
+    ) -> Tuple[bool, str]:
+        return _disc.reorganize_multi_disc_album(
+            self, folder_path, audio_files, year, album_name, dry_run
+        )
 
     # --- Naming / filename helpers ---
 
@@ -118,14 +130,19 @@ class FolderManager:
     def is_folder_properly_named(self, folder_path: str) -> bool:
         return _naming.is_folder_properly_named(folder_path, self.ALBUM_FOLDER_PATTERN)
 
-    def parse_folder_name(self, folder_path: str) -> Tuple[Optional[int], Optional[str]]:
+    def parse_folder_name(
+        self, folder_path: str
+    ) -> Tuple[Optional[int], Optional[str]]:
         return _naming.parse_folder_name(folder_path, self.ALBUM_FOLDER_PATTERN)
 
-    def rename_folder(self, current_path: str, new_name: str,
-                      dry_run: bool = False) -> CommitResult:
+    def rename_folder(
+        self, current_path: str, new_name: str, dry_run: bool = False
+    ) -> CommitResult:
         return _naming.rename_folder(self, current_path, new_name, dry_run)
 
-    def get_album_info_from_files(self, audio_files: List[AudioFile]) -> Tuple[Optional[int], Optional[str]]:
+    def get_album_info_from_files(
+        self, audio_files: List[AudioFile]
+    ) -> Tuple[Optional[int], Optional[str]]:
         return _naming.get_album_info_from_files(audio_files)
 
     def generate_filename(self, metadata, extension: str) -> Optional[str]:
@@ -134,6 +151,7 @@ class FolderManager:
     def should_rename_file(self, current_path: str, metadata) -> bool:
         return _naming.should_rename_file(current_path, metadata)
 
-    def rename_audio_file(self, file_path: str, new_name: str,
-                          dry_run: bool = False) -> CommitResult:
+    def rename_audio_file(
+        self, file_path: str, new_name: str, dry_run: bool = False
+    ) -> CommitResult:
         return _naming.rename_audio_file(self, file_path, new_name, dry_run)

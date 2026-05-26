@@ -1,7 +1,6 @@
 """Stateless parsing helpers for Discogs API responses."""
 
 import re
-from typing import Optional
 
 from models import DiscogsRelease, DiscogsTrack
 

@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from models import (
-    AudioFile, TrackMetadata, ProcessingStats, AlbumFolder, ConfirmAction, CollisionMap,
+    AudioFile,
+    TrackMetadata,
+    ProcessingStats,
+    AlbumFolder,
+    CollisionMap,
 )
 from id3_handler import ID3Handler
 from folder_manager import FolderManager
@@ -45,7 +49,7 @@ class ID3Processor:
             self.acr_client = ACRCloudClient(
                 config["acrcloud_host"],
                 config["acrcloud_access_key"],
-                config["acrcloud_access_secret"]
+                config["acrcloud_access_secret"],
             )
 
         self.discogs_client = None
@@ -54,6 +58,7 @@ class ID3Processor:
 
     def process(self, path: str) -> None:
         from config import eprint
+
         path_obj = Path(path)
 
         if path_obj.is_file():
@@ -70,14 +75,14 @@ class ID3Processor:
         self.prompts.show_summary(self.stats)
 
     def _filter_folders_from_start(
-        self,
-        folders: List[str],
-        start_at: Optional[Path]
+        self, folders: List[str], start_at: Optional[Path]
     ) -> List[str]:
         if start_at is None:
             return folders
 
-        _norm = lambda p: unicodedata.normalize("NFC", str(p))
+        def _norm(p):
+            return unicodedata.normalize("NFC", str(p))
+
         start_at_resolved = start_at.resolve()
 
         for i, folder in enumerate(folders):
@@ -85,15 +90,21 @@ class ID3Processor:
             if _norm(folder_resolved) == _norm(start_at_resolved):
                 skipped = i
                 if skipped > 0:
-                    self.prompts.print(f"Skipping {skipped} folder(s) before: {start_at.name}")
+                    self.prompts.print(
+                        f"Skipping {skipped} folder(s) before: {start_at.name}"
+                    )
                 return folders[i:]
 
         for i, folder in enumerate(folders):
             folder_resolved = Path(folder).resolve()
-            if any(_norm(p) == _norm(start_at_resolved) for p in folder_resolved.parents):
+            if any(
+                _norm(p) == _norm(start_at_resolved) for p in folder_resolved.parents
+            ):
                 skipped = i
                 if skipped > 0:
-                    self.prompts.print(f"Skipping {skipped} folder(s) before: {start_at.name}")
+                    self.prompts.print(
+                        f"Skipping {skipped} folder(s) before: {start_at.name}"
+                    )
                 return folders[i:]
 
         self.prompts.print(f"Warning: Start folder not found in scan: {start_at}")
@@ -109,13 +120,16 @@ class ID3Processor:
 
         if not self.args.include_root:
             base_str = str(base.resolve())
-            folders_to_process = {f for f in folders_to_process
-                                  if str(Path(f).resolve()) != base_str}
+            folders_to_process = {
+                f for f in folders_to_process if str(Path(f).resolve()) != base_str
+            }
 
         folders_to_process = sorted(folders_to_process)
 
         start_at = Path(self.args.start_at) if self.args.start_at else None
-        folders_to_process = self._filter_folders_from_start(folders_to_process, start_at)
+        folders_to_process = self._filter_folders_from_start(
+            folders_to_process, start_at
+        )
 
         self.prompts.print(f"\nFound {len(folders_to_process)} folder(s) to process\n")
 
@@ -148,14 +162,14 @@ class ID3Processor:
                     result = self.folder_manager.normalize_disc_folder_name(
                         disc_folder.folder_path,
                         disc_folder.detected_disc_number,
-                        dry_run=self.args.dry_run
+                        dry_run=self.args.dry_run,
                     )
                     if result.success and result.message != disc_folder.folder_path:
                         if not self.args.dry_run:
                             disc_folders[i] = AlbumFolder(
                                 folder_path=result.message,
                                 detected_disc_number=disc_folder.detected_disc_number,
-                                parent_folder=disc_folder.parent_folder
+                                parent_folder=disc_folder.parent_folder,
                             )
                         self.prompts.print(f"  Renamed disc folder: {result.message}")
 
@@ -165,30 +179,50 @@ class ID3Processor:
                     self._process_disc(disc_folder, disc_files)
         else:
             needs_tag_update = [af for af in audio_files if af.needs_processing]
-            needs_rename = [af for af in audio_files if af.needs_rename] if not self.args.no_file_rename else []
+            needs_rename = (
+                [af for af in audio_files if af.needs_rename]
+                if not self.args.no_file_rename
+                else []
+            )
             self.prompts.show_folder_status(
                 folder_path, len(audio_files), len(needs_tag_update), len(needs_rename)
             )
 
-            files_needing_work = {af for af in audio_files if af.needs_processing or af.needs_rename}
+            files_needing_work = {
+                af for af in audio_files if af.needs_processing or af.needs_rename
+            }
             if files_needing_work or self.args.force:
-                files_to_process = audio_files if self.args.force else list(files_needing_work)
+                files_to_process = (
+                    audio_files if self.args.force else list(files_needing_work)
+                )
                 self._process_files(files_to_process)
 
         if not self.args.no_rename:
             self._handle_folder_rename(folder_path, audio_files)
 
-    def _process_disc(self, disc_folder: AlbumFolder, audio_files: List[AudioFile]) -> None:
+    def _process_disc(
+        self, disc_folder: AlbumFolder, audio_files: List[AudioFile]
+    ) -> None:
         needs_tag_update = [af for af in audio_files if af.needs_processing]
-        needs_rename = [af for af in audio_files if af.needs_rename] if not self.args.no_file_rename else []
+        needs_rename = (
+            [af for af in audio_files if af.needs_rename]
+            if not self.args.no_file_rename
+            else []
+        )
 
-        self.prompts.print(f"\n  Disc {disc_folder.detected_disc_number}: "
-                          f"{len(audio_files)} files, {len(needs_tag_update)} need tags, "
-                          f"{len(needs_rename)} need rename")
+        self.prompts.print(
+            f"\n  Disc {disc_folder.detected_disc_number}: "
+            f"{len(audio_files)} files, {len(needs_tag_update)} need tags, "
+            f"{len(needs_rename)} need rename"
+        )
 
-        files_needing_work = {af for af in audio_files if af.needs_processing or af.needs_rename}
+        files_needing_work = {
+            af for af in audio_files if af.needs_processing or af.needs_rename
+        }
         if files_needing_work or self.args.force:
-            files_to_process = audio_files if self.args.force else list(files_needing_work)
+            files_to_process = (
+                audio_files if self.args.force else list(files_needing_work)
+            )
 
             for af in files_to_process:
                 if af.needs_processing and af.current_tags.disc_number is None:
@@ -211,7 +245,9 @@ class ID3Processor:
 
     # --- Matching shims ---
 
-    def _match_track_from_cached_release(self, af: AudioFile, release, acr_result) -> bool:
+    def _match_track_from_cached_release(
+        self, af: AudioFile, release, acr_result
+    ) -> bool:
         return _matching.match_track_from_cached_release(self, af, release, acr_result)
 
     def _search_and_match_discogs(self, af: AudioFile, acr_result):
@@ -234,7 +270,9 @@ class ID3Processor:
     def _handle_file_renames(self, audio_files: List[AudioFile]) -> None:
         return _finalize.handle_file_renames(self, audio_files)
 
-    def _handle_folder_rename(self, folder_path: str, audio_files: List[AudioFile]) -> None:
+    def _handle_folder_rename(
+        self, folder_path: str, audio_files: List[AudioFile]
+    ) -> None:
         return _finalize.handle_folder_rename(self, folder_path, audio_files)
 
     def _discover_audio_files(self, folder_path: str) -> List[AudioFile]:

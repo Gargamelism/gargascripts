@@ -3,11 +3,10 @@
 import sys
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models import TrackMetadata, TagStatus, DiscogsRelease, DiscogsTrack, AudioFile
+from models import TrackMetadata, TagStatus, AudioFile
 
 
 class TestTrackMetadata:

@@ -1,9 +1,8 @@
 """Additional coverage tests for acrcloud_client.py."""
 
 import sys
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest

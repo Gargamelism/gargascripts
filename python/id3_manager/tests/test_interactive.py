@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from io import StringIO
 from unittest.mock import patch
 
 import pytest
@@ -123,7 +122,7 @@ class TestAutoYesBehavior:
 
     def test_show_discogs_candidates_selects_first(self, prompts_auto_yes):
         """Should select first release in auto_yes mode."""
-        from models import DiscogsRelease, DiscogsTrack
+        from models import DiscogsRelease
         releases = [
             DiscogsRelease(
                 release_id=1,

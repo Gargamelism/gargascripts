@@ -12,10 +12,13 @@ import sys
 from pathlib import Path
 
 from config import (
-    load_config, validate_config, eprint,
-    get_discogs_token_instructions, get_acrcloud_instructions
+    load_config,
+    validate_config,
+    eprint,
+    get_discogs_token_instructions,
+    get_acrcloud_instructions,
 )
-from id3_handler import ID3Handler
+from id3_handler import ID3Handler  # noqa: F401 — tests patch main.ID3Handler
 from interactive import InteractivePrompts
 from processor import ID3Processor
 
@@ -24,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build argument parser."""
     parser = argparse.ArgumentParser(
         description="ID3 tag manager: identify songs via ACRCloud, "
-                    "fetch metadata from Discogs, and organize album folders.",
+        "fetch metadata from Discogs, and organize album folders.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -45,81 +48,74 @@ Examples:
 
   # Only rename files based on existing ID3 tags (no lookups)
   python -m id3_manager /path/to/album --rename-only
-"""
+""",
     )
 
     # Required arguments
-    parser.add_argument(
-        "path",
-        help="Path to audio file or folder to process"
-    )
+    parser.add_argument("path", help="Path to audio file or folder to process")
 
     # Processing options
     parser.add_argument(
-        "--recursive", "-r",
+        "--recursive",
+        "-r",
         action="store_true",
-        help="Recursively process all subfolders"
+        help="Recursively process all subfolders",
     )
 
     parser.add_argument(
         "--include-root",
         action="store_true",
-        help="Include files in root folder when using --recursive (skipped by default)"
+        help="Include files in root folder when using --recursive (skipped by default)",
     )
 
     parser.add_argument(
         "--start-at",
-        help="When using --recursive, start processing from this folder path (skips earlier folders)"
+        help="When using --recursive, start processing from this folder path (skips earlier folders)",
     )
 
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without applying them"
+        "--dry-run", action="store_true", help="Preview changes without applying them"
     )
 
     parser.add_argument(
-        "--yes", "-y",
+        "--yes",
+        "-y",
         action="store_true",
-        help="Auto-confirm all changes (non-interactive)"
+        help="Auto-confirm all changes (non-interactive)",
     )
 
     # Tag handling
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Re-process files even if they have complete tags"
+        help="Re-process files even if they have complete tags",
     )
 
     parser.add_argument(
         "--skip-acr",
         action="store_true",
-        help="Skip ACRCloud lookup (use existing tags for Discogs search)"
+        help="Skip ACRCloud lookup (use existing tags for Discogs search)",
     )
 
     parser.add_argument(
         "--skip-discogs",
         action="store_true",
-        help="Skip Discogs lookup (use ACRCloud results only)"
+        help="Skip Discogs lookup (use ACRCloud results only)",
     )
 
     parser.add_argument(
         "--rename-only",
         action="store_true",
-        help="Only rename files based on existing ID3 tags (skip all lookups)"
+        help="Only rename files based on existing ID3 tags (skip all lookups)",
     )
 
     # Folder handling
     parser.add_argument(
-        "--no-rename",
-        action="store_true",
-        help="Skip folder renaming step"
+        "--no-rename", action="store_true", help="Skip folder renaming step"
     )
 
     parser.add_argument(
-        "--no-file-rename",
-        action="store_true",
-        help="Skip file renaming step"
+        "--no-file-rename", action="store_true", help="Skip file renaming step"
     )
 
     # OneDrive mirroring (keeps bisync in lockstep with local renames)
@@ -127,47 +123,41 @@ Examples:
         "--mirror-onedrive",
         action="store_true",
         help="Mirror every local rename/move to OneDrive via rclone server-side "
-             "moves, so rclone bisync sees matching names on both sides."
+        "moves, so rclone bisync sees matching names on both sides.",
     )
 
     parser.add_argument(
         "--onedrive-root",
         default=None,
         help="Local root of the OneDrive sync. Required when --mirror-onedrive "
-             "is set. Renames outside this root are not mirrored."
+        "is set. Renames outside this root are not mirrored.",
     )
 
     parser.add_argument(
         "--onedrive-remote",
         default="onedrive:",
-        help="rclone remote for OneDrive (default: onedrive:)"
+        help="rclone remote for OneDrive (default: onedrive:)",
     )
 
     parser.add_argument(
         "--rclone-path",
         default=None,
         help="Path to the rclone binary (default: auto-detect via PATH, "
-             "falling back to /opt/homebrew/bin/rclone)"
+        "falling back to /opt/homebrew/bin/rclone)",
     )
 
     # Configuration
     parser.add_argument(
-        "--env-file",
-        default=".env",
-        help="Path to .env file (default: ./.env)"
+        "--env-file", default=".env", help="Path to .env file (default: ./.env)"
     )
 
     parser.add_argument(
-        "--no-color",
-        action="store_true",
-        help="Disable colored output"
+        "--no-color", action="store_true", help="Disable colored output"
     )
 
     # Verbosity
     parser.add_argument(
-        "--quiet", "-q",
-        action="store_true",
-        help="Suppress non-essential output"
+        "--quiet", "-q", action="store_true", help="Suppress non-essential output"
     )
 
     return parser
@@ -222,9 +212,7 @@ def main():
 
     # Initialize prompts
     prompts = InteractivePrompts(
-        no_color=args.no_color,
-        auto_yes=args.yes,
-        quiet=args.quiet
+        no_color=args.no_color, auto_yes=args.yes, quiet=args.quiet
     )
 
     # Run processor

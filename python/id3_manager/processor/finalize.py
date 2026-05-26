@@ -1,13 +1,12 @@
 """Tag application, file/folder renames, collision detection, and discovery."""
 
-import sys
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List
 
 from config import eprint
-from models import AudioFile, CollisionMap, DiscTrack, TrackMetadata
+from models import AudioFile, CollisionMap, DiscTrack
 from id3_handler import ID3Handler
 
 

@@ -3,13 +3,13 @@
 import sys
 from pathlib import Path
 from argparse import Namespace
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import Mock, patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from main import ID3Processor, build_parser, main
+from main import ID3Processor, main
 from models import (
     AudioFile, TrackMetadata, DiscTrack, DiscogsRelease, DiscogsTrack, AlbumFolder,
     ConfirmAction,

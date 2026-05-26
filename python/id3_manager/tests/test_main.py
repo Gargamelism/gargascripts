@@ -3,14 +3,14 @@
 import sys
 from pathlib import Path
 from argparse import Namespace
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import ID3Processor, build_parser
-from models import AudioFile, TrackMetadata, TagStatus, DiscogsRelease, DiscogsTrack
+from models import AudioFile, TrackMetadata, DiscogsRelease, DiscogsTrack
 from sync_results import CommitResult
 
 

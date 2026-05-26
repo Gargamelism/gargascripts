@@ -8,7 +8,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import check_malformed
 from check_malformed import main
 
 

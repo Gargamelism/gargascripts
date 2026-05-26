@@ -1,13 +1,16 @@
 """Interactive user prompts and confirmations."""
 
-import dataclasses
-import sys
 from pathlib import Path
 from typing import List, Optional
 
 from models import (
-    AudioFile, TrackMetadata, DiscogsRelease, ProcessingStats, ACRCloudResult,
-    ConfirmAction, CollisionMap,
+    AudioFile,
+    TrackMetadata,
+    DiscogsRelease,
+    ProcessingStats,
+    ACRCloudResult,
+    ConfirmAction,
+    CollisionMap,
 )
 from . import display as _display
 from . import editing as _editing
@@ -27,8 +30,9 @@ class InteractivePrompts:
         "dim": "\033[2m",
     }
 
-    def __init__(self, no_color: bool = False, auto_yes: bool = False,
-                 quiet: bool = False):
+    def __init__(
+        self, no_color: bool = False, auto_yes: bool = False, quiet: bool = False
+    ):
         self.no_color = no_color
         self.auto_yes = auto_yes
         self.quiet = quiet
@@ -61,12 +65,16 @@ class InteractivePrompts:
         files_with_changes = [af for af in audio_files if af.proposed_tags]
 
         while True:
-            print(f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}")
+            print(
+                f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}"
+            )
             choice = self._prompt_choice(
                 "Apply changes? [y/N/r(eview)/e(dit)/a(lbum edit)/q(uit)]:",
                 {
-                    "y": ConfirmAction.APPLY, "yes": ConfirmAction.APPLY,
-                    "n": ConfirmAction.SKIP,  "no":  ConfirmAction.SKIP,
+                    "y": ConfirmAction.APPLY,
+                    "yes": ConfirmAction.APPLY,
+                    "n": ConfirmAction.SKIP,
+                    "no": ConfirmAction.SKIP,
                     "r": ConfirmAction.REVIEW,
                     "e": ConfirmAction.EDIT,
                     "a": ConfirmAction.ALBUM_EDIT,
@@ -104,37 +112,63 @@ class InteractivePrompts:
     def confirm_collision_resolution(self, collisions: CollisionMap) -> str:
         print(f"\n{self._c('red', 'Track-number collisions detected:')}")
         for key, files in sorted(collisions.items()):
-            print(self._c('yellow', f"  Disc {key.disc}, track {key.track}:"))
+            print(self._c("yellow", f"  Disc {key.disc}, track {key.track}:"))
             for af in files:
                 tags = af.proposed_tags or af.current_tags
                 print(f"    {Path(af.file_path).name}  ->  {tags.title}")
         if self.auto_yes:
-            print(self._c('red', '[AUTO] Collision detected - skipping conflicting files.'))
+            print(
+                self._c(
+                    "red", "[AUTO] Collision detected - skipping conflicting files."
+                )
+            )
             return "skip"
         return self._prompt_choice(
             "Resolve collisions? [s]kip conflicting / [e]dit fields / [a]pply anyway / [q]uit:",
-            {"s": "skip", "skip": "skip",
-             "e": "edit", "edit": "edit",
-             "a": "apply", "apply": "apply",
-             "q": "quit", "quit": "quit"},
+            {
+                "s": "skip",
+                "skip": "skip",
+                "e": "edit",
+                "edit": "edit",
+                "a": "apply",
+                "apply": "apply",
+                "q": "quit",
+                "quit": "quit",
+            },
             default="skip",
         )
 
     def confirm_force_override(
-        self, af: AudioFile, filename: str, current: TrackMetadata, proposed: TrackMetadata
+        self,
+        af: AudioFile,
+        filename: str,
+        current: TrackMetadata,
+        proposed: TrackMetadata,
     ) -> bool:
         if self.auto_yes:
-            print(self._c('red', f'[AUTO] Keeping existing tags for {filename} (force override not auto-applied).'))
+            print(
+                self._c(
+                    "red",
+                    f"[AUTO] Keeping existing tags for {filename} (force override not auto-applied).",
+                )
+            )
             return False
         while True:
-            print(f"\n{self._c('yellow', f'--force changes already-complete tags for {filename}:')}")
+            print(
+                f"\n{self._c('yellow', f'--force changes already-complete tags for {filename}:')}"
+            )
             print(f"  track#:  {current.track_number}  ->  {proposed.track_number}")
             print(f"  title:   {current.title}  ->  {proposed.title}")
             choice = self._prompt_choice(
                 f"Override existing tags for {filename}? [y/e(dit)/N]:",
-                {"y": "accept", "yes": "accept",
-                 "e": "edit", "edit": "edit",
-                 "n": "decline", "no": "decline"},
+                {
+                    "y": "accept",
+                    "yes": "accept",
+                    "e": "edit",
+                    "edit": "edit",
+                    "n": "decline",
+                    "no": "decline",
+                },
                 default="decline",
             )
             if choice == "accept":
@@ -167,7 +201,9 @@ class InteractivePrompts:
     def show_acr_result(self, result: ACRCloudResult) -> None:
         return _display.show_acr_result(self, result)
 
-    def show_discogs_candidates(self, releases: List[DiscogsRelease]) -> Optional[int | str]:
+    def show_discogs_candidates(
+        self, releases: List[DiscogsRelease]
+    ) -> Optional[int | str]:
         return _display.show_discogs_candidates(self, releases)
 
     def show_file_rename(self, current_name: str, new_name: str) -> None:
@@ -179,10 +215,16 @@ class InteractivePrompts:
     def show_summary(self, stats: ProcessingStats) -> None:
         return _display.show_summary(self, stats)
 
-    def show_folder_status(self, folder_path: str, file_count: int,
-                           needs_tag_update: int, needs_rename: int) -> None:
-        return _display.show_folder_status(self, folder_path, file_count,
-                                           needs_tag_update, needs_rename)
+    def show_folder_status(
+        self,
+        folder_path: str,
+        file_count: int,
+        needs_tag_update: int,
+        needs_rename: int,
+    ) -> None:
+        return _display.show_folder_status(
+            self, folder_path, file_count, needs_tag_update, needs_rename
+        )
 
     # --- Search / manual-entry shims ---
     def get_discogs_url_or_id(self) -> Optional[int]:
@@ -194,15 +236,19 @@ class InteractivePrompts:
     def handle_no_discogs_match(self, acr_result: ACRCloudResult) -> str:
         return _search.handle_no_discogs_match(self, acr_result)
 
-    def get_manual_metadata(self, defaults: Optional[TrackMetadata] = None) -> Optional[TrackMetadata]:
+    def get_manual_metadata(
+        self, defaults: Optional[TrackMetadata] = None
+    ) -> Optional[TrackMetadata]:
         return _search.get_manual_metadata(self, defaults)
 
-    def prompt_missing_fields(self, metadata: TrackMetadata,
-                              filename: str) -> Optional[TrackMetadata]:
+    def prompt_missing_fields(
+        self, metadata: TrackMetadata, filename: str
+    ) -> Optional[TrackMetadata]:
         return _search.prompt_missing_fields(self, metadata, filename)
 
-    def get_modified_search_query(self, default_artist: str,
-                                  default_track: str) -> tuple:
+    def get_modified_search_query(
+        self, default_artist: str, default_track: str
+    ) -> tuple:
         return _search.get_modified_search_query(self, default_artist, default_track)
 
     def handle_track_not_in_release(self, filename: str, release_title: str) -> str:
