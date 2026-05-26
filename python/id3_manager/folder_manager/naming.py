@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 from models import AudioFile
 from sync_results import CommitResult
+from folder_manager.protocols import RenameCoordinator
 
 
 def sanitize_name(name: str) -> str:
@@ -27,7 +28,9 @@ def generate_disc_folder_name(disc_number: int) -> str:
 
 
 def generate_filename(metadata, extension: str) -> Optional[str]:
-    if not all([metadata.artist, metadata.album, metadata.track_number, metadata.title]):
+    if not all(
+        [metadata.artist, metadata.album, metadata.track_number, metadata.title]
+    ):
         return None
     artist = sanitize_name(metadata.artist)
     album = sanitize_name(metadata.album)
@@ -40,7 +43,9 @@ def generate_filename(metadata, extension: str) -> Optional[str]:
     return f"{artist} - {album_part} - {track_num} - {title}{extension}"
 
 
-def parse_folder_name(folder_path: str, pattern: str) -> Tuple[Optional[int], Optional[str]]:
+def parse_folder_name(
+    folder_path: str, pattern: str
+) -> Tuple[Optional[int], Optional[str]]:
     folder_name = Path(folder_path).name
     match = re.match(pattern, folder_name)
     if match:
@@ -52,7 +57,9 @@ def is_folder_properly_named(folder_path: str, pattern: str) -> bool:
     return bool(re.match(pattern, Path(folder_path).name))
 
 
-def get_album_info_from_files(audio_files: List[AudioFile]) -> Tuple[Optional[int], Optional[str]]:
+def get_album_info_from_files(
+    audio_files: List[AudioFile],
+) -> Tuple[Optional[int], Optional[str]]:
     year = None
     album = None
     for af in audio_files:
@@ -74,45 +81,57 @@ def should_rename_file(current_path: str, metadata) -> bool:
     return Path(current_path).stem != Path(expected_filename).stem
 
 
-def rename_folder(fm, current_path: str, new_name: str, dry_run: bool = False) -> CommitResult:
+def rename_folder(
+    renamer: RenameCoordinator, current_path: str, new_name: str, dry_run: bool = False
+) -> CommitResult:
     current = Path(current_path)
     new_path = current.parent / new_name
 
     if new_path.exists():
-        return CommitResult(success=False, message=f"Target folder already exists: {new_path}")
+        return CommitResult(
+            success=False, message=f"Target folder already exists: {new_path}"
+        )
 
     if current.name == new_name:
         return CommitResult(success=True, message="Folder already has correct name")
 
-    mirror = fm._mirror_rename(current, new_path, dry_run, allow_recovery=False)
+    mirror = renamer.mirror_rename(current, new_path, dry_run, allow_recovery=False)
     if not mirror.success:
-        return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
+        return CommitResult(
+            success=False, message=f"Remote rename failed: {mirror.message}"
+        )
 
     if dry_run:
         return CommitResult(success=True, message=f"Would rename to: {new_path}")
 
-    return fm._commit_with_rollback(
+    return renamer.commit_with_rollback(
         current, new_path, lambda: current.rename(new_path), mirror_result=mirror
     )
 
 
-def rename_audio_file(fm, file_path: str, new_name: str, dry_run: bool = False) -> CommitResult:
+def rename_audio_file(
+    renamer: RenameCoordinator, file_path: str, new_name: str, dry_run: bool = False
+) -> CommitResult:
     current = Path(file_path)
     new_path = current.parent / new_name
 
     if new_path.exists() and new_path != current:
-        return CommitResult(success=False, message=f"Target file already exists: {new_path}")
+        return CommitResult(
+            success=False, message=f"Target file already exists: {new_path}"
+        )
 
     if current.name == new_name:
         return CommitResult(success=True, message="File already has correct name")
 
-    mirror = fm._mirror_rename(current, new_path, dry_run)
+    mirror = renamer.mirror_rename(current, new_path, dry_run)
     if not mirror.success:
-        return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
+        return CommitResult(
+            success=False, message=f"Remote rename failed: {mirror.message}"
+        )
 
     if dry_run:
         return CommitResult(success=True, message=f"Would rename to: {new_name}")
 
-    return fm._commit_with_rollback(
+    return renamer.commit_with_rollback(
         current, new_path, lambda: current.rename(new_path), mirror_result=mirror
     )

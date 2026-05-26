@@ -31,42 +31,50 @@ def _af(disc=1, title="Song", path="/fake/song.mp3"):
         file_path=path,
         format="mp3",
         current_tags=TrackMetadata(
-            title=title, artist="A", album="B",
-            track_number=1, disc_number=disc, total_discs=2
+            title=title,
+            artist="A",
+            album="B",
+            track_number=1,
+            disc_number=disc,
+            total_discs=2,
         ),
     )
 
 
 # ---------------------------------------------------------------------------
-# _mirror_rename
+# mirror_rename
 # ---------------------------------------------------------------------------
+
 
 class TestMirrorRename:
     def test_no_op_when_no_sync(self, fm, tmp_path):
         src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
-        result = fm._mirror_rename(src, dst, dry_run=False)
+        result = fm.mirror_rename(src, dst, dry_run=False)
         assert result.success is True
         assert result.mode == "skipped"
 
     def test_delegates_to_onedrive_sync(self, fm_sync, tmp_path):
         src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
-        fm_sync._mirror_rename(src, dst, dry_run=False)
+        fm_sync.mirror_rename(src, dst, dry_run=False)
         fm_sync.onedrive_sync.moveto.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# _commit_with_rollback
+# commit_with_rollback
 # ---------------------------------------------------------------------------
+
 
 class TestCommitWithRollback:
     def test_success(self, fm, tmp_path):
         src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
         called = []
-        result = fm._commit_with_rollback(
-            src, dst, lambda: called.append(True),
+        result = fm.commit_with_rollback(
+            src,
+            dst,
+            lambda: called.append(True),
             mirror_result=MoveResult(True, "", "moveto"),
         )
         assert result.success is True
@@ -75,13 +83,17 @@ class TestCommitWithRollback:
     def test_local_failure_triggers_rollback(self, fm_sync, tmp_path):
         src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(True, "rolled back", "moveto")
+        fm_sync.onedrive_sync.moveto.return_value = MoveResult(
+            True, "rolled back", "moveto"
+        )
 
         def fail():
             raise OSError("rename failed")
 
-        result = fm_sync._commit_with_rollback(
-            src, dst, fail,
+        result = fm_sync.commit_with_rollback(
+            src,
+            dst,
+            fail,
             mirror_result=MoveResult(True, "", "moveto"),
         )
         assert result.success is False
@@ -95,8 +107,10 @@ class TestCommitWithRollback:
         def fail():
             raise OSError("rename failed")
 
-        result = fm_sync._commit_with_rollback(
-            src, dst, fail,
+        result = fm_sync.commit_with_rollback(
+            src,
+            dst,
+            fail,
             mirror_result=MoveResult(True, "", "recovered"),
         )
         assert result.success is False
@@ -105,13 +119,17 @@ class TestCommitWithRollback:
     def test_rollback_failure_propagates_error(self, fm_sync, tmp_path):
         src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(False, "rollback failed", "failed")
+        fm_sync.onedrive_sync.moveto.return_value = MoveResult(
+            False, "rollback failed", "failed"
+        )
 
         def fail():
             raise OSError("local error")
 
-        result = fm_sync._commit_with_rollback(
-            src, dst, fail,
+        result = fm_sync.commit_with_rollback(
+            src,
+            dst,
+            fail,
             mirror_result=MoveResult(True, "", "moveto"),
         )
         assert result.success is False
@@ -121,6 +139,7 @@ class TestCommitWithRollback:
 # ---------------------------------------------------------------------------
 # detect_multi_disc_structure
 # ---------------------------------------------------------------------------
+
 
 class TestDetectMultiDiscStructure:
     def test_returns_single_when_not_a_dir(self, fm, tmp_path):
@@ -154,6 +173,7 @@ class TestDetectMultiDiscStructure:
 # infer_disc_info_from_path
 # ---------------------------------------------------------------------------
 
+
 class TestInferDiscInfoFromPath:
     def test_returns_disc_info_in_cd_folder(self, fm, tmp_path):
         cd1 = tmp_path / "CD1"
@@ -183,6 +203,7 @@ class TestInferDiscInfoFromPath:
 # ---------------------------------------------------------------------------
 # normalize_disc_folder_name
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeDiscFolderName:
     def test_already_correct_name(self, fm, tmp_path):
@@ -226,21 +247,28 @@ class TestNormalizeDiscFolderName:
 # create_multi_disc_structure
 # ---------------------------------------------------------------------------
 
+
 class TestCreateMultiDiscStructure:
     def test_creates_folders(self, fm, tmp_path):
-        success, result = fm.create_multi_disc_structure(str(tmp_path), 2020, "Album", 2)
+        success, result = fm.create_multi_disc_structure(
+            str(tmp_path), 2020, "Album", 2
+        )
         assert success is True
         assert (Path(result) / "CD1").exists()
         assert (Path(result) / "CD2").exists()
 
     def test_dry_run_does_not_create(self, fm, tmp_path):
-        success, result = fm.create_multi_disc_structure(str(tmp_path), 2020, "Album", 2, dry_run=True)
+        success, result = fm.create_multi_disc_structure(
+            str(tmp_path), 2020, "Album", 2, dry_run=True
+        )
         assert success is True
         assert "Would create" in result
 
     def test_handles_oserror(self, fm, tmp_path):
         with patch("folder_manager.Path.mkdir", side_effect=OSError("no space")):
-            success, result = fm.create_multi_disc_structure(str(tmp_path), 2020, "Album", 2)
+            success, result = fm.create_multi_disc_structure(
+                str(tmp_path), 2020, "Album", 2
+            )
         assert success is False
         assert "no space" in result
 
@@ -248,6 +276,7 @@ class TestCreateMultiDiscStructure:
 # ---------------------------------------------------------------------------
 # move_file_to_disc_folder
 # ---------------------------------------------------------------------------
+
 
 class TestMoveFileToDiscFolder:
     def test_moves_file(self, fm, tmp_path):
@@ -299,20 +328,19 @@ class TestMoveFileToDiscFolder:
 # reorganize_multi_disc_album
 # ---------------------------------------------------------------------------
 
+
 class TestReorganizeMultiDiscAlbum:
     def test_fails_when_not_multi_disc(self, fm, tmp_path):
-        files = [_af(disc=1)]
-        # disc=1, total_discs=2 but only 1 unique disc → max disc = 2, should still be multi
-        # Actually detect_multi_disc_from_metadata returns max of disc_number/total_discs
-        # With disc_number=1 and total_discs=2 → max_disc = 2 → should work
-        # Use a truly single-disc setup:
+        # Use a truly single-disc setup (disc_number=None, total_discs=None → max_disc=1):
         af = AudioFile(
             file_path=str(tmp_path / "song.mp3"),
             format="mp3",
             current_tags=TrackMetadata(title="T", disc_number=None, total_discs=None),
         )
         (tmp_path / "song.mp3").touch()
-        success, msg = fm.reorganize_multi_disc_album(str(tmp_path), [af], 2020, "Album")
+        success, msg = fm.reorganize_multi_disc_album(
+            str(tmp_path), [af], 2020, "Album"
+        )
         assert success is False
         assert "Not a multi-disc" in msg
 
@@ -331,7 +359,9 @@ class TestReorganizeMultiDiscAlbum:
         ]
         for f in files:
             Path(f.file_path).touch()
-        success, msg = fm.reorganize_multi_disc_album(str(tmp_path), files, 2020, "Album", dry_run=True)
+        success, msg = fm.reorganize_multi_disc_album(
+            str(tmp_path), files, 2020, "Album", dry_run=True
+        )
         assert success is True
         assert "Would reorganize" in msg
 
@@ -350,7 +380,9 @@ class TestReorganizeMultiDiscAlbum:
         ]
         for f in files:
             Path(f.file_path).touch()
-        success, msg = fm.reorganize_multi_disc_album(str(tmp_path), files, 2020, "Album")
+        success, msg = fm.reorganize_multi_disc_album(
+            str(tmp_path), files, 2020, "Album"
+        )
         assert success is True
 
     def test_partial_failure_reported(self, fm, tmp_path):
@@ -364,7 +396,9 @@ class TestReorganizeMultiDiscAlbum:
         Path(tmp_path / "t1.mp3").touch()
         fail = CommitResult(success=False, message="target already exists")
         with patch.object(fm, "move_file_to_disc_folder", return_value=fail):
-            success, msg = fm.reorganize_multi_disc_album(str(tmp_path), files, 2020, "Album")
+            success, msg = fm.reorganize_multi_disc_album(
+                str(tmp_path), files, 2020, "Album"
+            )
         assert success is False
         assert "Partial success" in msg or "Errors" in msg
 
@@ -372,6 +406,7 @@ class TestReorganizeMultiDiscAlbum:
 # ---------------------------------------------------------------------------
 # rename_audio_file
 # ---------------------------------------------------------------------------
+
 
 class TestRenameAudioFile:
     def test_already_correct_name(self, fm, tmp_path):

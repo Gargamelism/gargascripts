@@ -22,7 +22,7 @@ class FolderManager:
     def __init__(self, onedrive_sync: Optional[OneDriveSync] = None):
         self.onedrive_sync = onedrive_sync
 
-    def _mirror_rename(
+    def mirror_rename(
         self,
         local_src: Path,
         local_dst: Path,
@@ -36,7 +36,7 @@ class FolderManager:
             local_src, local_dst, dry_run=dry_run, allow_recovery=allow_recovery
         )
 
-    def _commit_with_rollback(
+    def commit_with_rollback(
         self,
         local_src: Path,
         local_dst: Path,
@@ -59,7 +59,7 @@ class FolderManager:
                     success=False,
                     message=f"{e} (remote already recovered to NEW name; not rolled back)",
                 )
-            rollback = self._mirror_rename(
+            rollback = self.mirror_rename(
                 local_dst, local_src, dry_run=False, allow_recovery=False
             )
             if not rollback.success:
@@ -77,10 +77,10 @@ class FolderManager:
     # --- Disc detection / reorganization ---
 
     def detect_multi_disc_structure(self, folder_path: str) -> List[AlbumFolder]:
-        return _disc.detect_multi_disc_structure(self, folder_path)
+        return _disc.detect_multi_disc_structure(folder_path)
 
     def infer_disc_info_from_path(self, file_path: str) -> Optional[Tuple[int, int]]:
-        return _disc.infer_disc_info_from_path(self, file_path)
+        return _disc.infer_disc_info_from_path(file_path)
 
     def detect_multi_disc_from_metadata(self, audio_files: List[AudioFile]) -> int:
         return _disc.detect_multi_disc_from_metadata(audio_files)
@@ -99,7 +99,7 @@ class FolderManager:
         dry_run: bool = False,
     ) -> Tuple[bool, str]:
         return _disc.create_multi_disc_structure(
-            self, source_folder, year, album_name, total_discs, dry_run
+            source_folder, year, album_name, total_discs, dry_run
         )
 
     def move_file_to_disc_folder(

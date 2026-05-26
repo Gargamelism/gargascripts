@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from models import AlbumFolder, AudioFile
 from sync_results import CommitResult
 from folder_manager.naming import generate_disc_folder_name, generate_folder_name
+from folder_manager.protocols import MultiDiscOrganizer, RenameCoordinator
 
 
 DISC_PATTERNS = [
@@ -26,7 +27,7 @@ def extract_disc_number(patterns: list, folder_name: str) -> Optional[int]:
     return None
 
 
-def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
+def detect_multi_disc_structure(folder_path: str) -> List[AlbumFolder]:
     path = Path(folder_path)
 
     if not path.is_dir():
@@ -36,7 +37,7 @@ def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
 
     disc_folders = []
     for subfolder in subfolders:
-        disc_num = extract_disc_number(fm.DISC_PATTERNS,subfolder.name)
+        disc_num = extract_disc_number(DISC_PATTERNS, subfolder.name)
         if disc_num is not None:
             disc_folders.append((disc_num, subfolder))
 
@@ -54,15 +55,16 @@ def detect_multi_disc_structure(fm, folder_path: str) -> List[AlbumFolder]:
     return [AlbumFolder(folder_path=folder_path)]
 
 
-def infer_disc_info_from_path(fm, file_path: str) -> Optional[Tuple[int, int]]:
+def infer_disc_info_from_path(file_path: str) -> Optional[Tuple[int, int]]:
     parent = Path(file_path).parent
-    disc_num = extract_disc_number(fm.DISC_PATTERNS,parent.name)
+    disc_num = extract_disc_number(DISC_PATTERNS, parent.name)
     if disc_num is None:
         return None
     grandparent = parent.parent
     sibling_disc_count = sum(
-        1 for d in grandparent.iterdir()
-        if d.is_dir() and extract_disc_number(fm.DISC_PATTERNS,d.name) is not None
+        1
+        for d in grandparent.iterdir()
+        if d.is_dir() and extract_disc_number(DISC_PATTERNS, d.name) is not None
     )
     return (disc_num, sibling_disc_count) if sibling_disc_count >= 2 else None
 
@@ -77,8 +79,12 @@ def detect_multi_disc_from_metadata(audio_files: List[AudioFile]) -> int:
     return max_disc
 
 
-def normalize_disc_folder_name(fm, folder_path: str, disc_number: int,
-                                dry_run: bool = False) -> CommitResult:
+def normalize_disc_folder_name(
+    renamer: RenameCoordinator,
+    folder_path: str,
+    disc_number: int,
+    dry_run: bool = False,
+) -> CommitResult:
     current = Path(folder_path)
     expected_name = generate_disc_folder_name(disc_number)
 
@@ -88,24 +94,33 @@ def normalize_disc_folder_name(fm, folder_path: str, disc_number: int,
     new_path = current.parent / expected_name
 
     if new_path.exists():
-        return CommitResult(success=False, message=f"Target folder already exists: {new_path}")
+        return CommitResult(
+            success=False, message=f"Target folder already exists: {new_path}"
+        )
 
-    mirror = fm._mirror_rename(current, new_path, dry_run, allow_recovery=False)
+    mirror = renamer.mirror_rename(current, new_path, dry_run, allow_recovery=False)
     if not mirror.success:
-        return CommitResult(success=False, message=f"Remote rename failed: {mirror.message}")
+        return CommitResult(
+            success=False, message=f"Remote rename failed: {mirror.message}"
+        )
 
     if dry_run:
         return CommitResult(
             success=True, message=f"Would rename '{current.name}' to '{expected_name}'"
         )
 
-    return fm._commit_with_rollback(
+    return renamer.commit_with_rollback(
         current, new_path, lambda: current.rename(new_path), mirror_result=mirror
     )
 
 
-def create_multi_disc_structure(fm, source_folder: str, year: int, album_name: str,
-                                 total_discs: int, dry_run: bool = False) -> Tuple[bool, str]:
+def create_multi_disc_structure(
+    source_folder: str,
+    year: int,
+    album_name: str,
+    total_discs: int,
+    dry_run: bool = False,
+) -> Tuple[bool, str]:
     source = Path(source_folder)
     new_base_name = generate_folder_name(year, album_name)
     new_base = source.parent / new_base_name
@@ -123,8 +138,9 @@ def create_multi_disc_structure(fm, source_folder: str, year: int, album_name: s
         return False, str(e)
 
 
-def move_file_to_disc_folder(fm, file_path: str, disc_folder: str,
-                              dry_run: bool = False) -> CommitResult:
+def move_file_to_disc_folder(
+    renamer: RenameCoordinator, file_path: str, disc_folder: str, dry_run: bool = False
+) -> CommitResult:
     source = Path(file_path)
     target = Path(disc_folder) / source.name
 
@@ -134,14 +150,16 @@ def move_file_to_disc_folder(fm, file_path: str, disc_folder: str,
     if target.exists():
         return CommitResult(success=False, message=f"Target already exists: {target}")
 
-    mirror = fm._mirror_rename(source, target, dry_run=dry_run)
+    mirror = renamer.mirror_rename(source, target, dry_run=dry_run)
     if not mirror.success:
-        return CommitResult(success=False, message=f"Remote move failed: {mirror.message}")
+        return CommitResult(
+            success=False, message=f"Remote move failed: {mirror.message}"
+        )
 
     if dry_run:
         return CommitResult(success=True, message=f"Would move to: {target}")
 
-    return fm._commit_with_rollback(
+    return renamer.commit_with_rollback(
         source,
         target,
         lambda: shutil.move(str(source), str(target)),
@@ -149,15 +167,20 @@ def move_file_to_disc_folder(fm, file_path: str, disc_folder: str,
     )
 
 
-def reorganize_multi_disc_album(fm, folder_path: str, audio_files: List[AudioFile],
-                                 year: int, album_name: str,
-                                 dry_run: bool = False) -> Tuple[bool, str]:
+def reorganize_multi_disc_album(
+    organizer: MultiDiscOrganizer,
+    folder_path: str,
+    audio_files: List[AudioFile],
+    year: int,
+    album_name: str,
+    dry_run: bool = False,
+) -> Tuple[bool, str]:
     total_discs = detect_multi_disc_from_metadata(audio_files)
 
     if total_discs <= 1:
         return False, "Not a multi-disc album based on metadata"
 
-    success, result = fm.create_multi_disc_structure(
+    success, result = organizer.create_multi_disc_structure(
         folder_path, year, album_name, total_discs, dry_run
     )
 
@@ -165,7 +188,8 @@ def reorganize_multi_disc_album(fm, folder_path: str, audio_files: List[AudioFil
         return False, result
 
     new_base = (
-        Path(result) if not dry_run
+        Path(result)
+        if not dry_run
         else Path(folder_path).parent / generate_folder_name(year, album_name)
     )
 
@@ -181,12 +205,14 @@ def reorganize_multi_disc_album(fm, folder_path: str, audio_files: List[AudioFil
     for af in audio_files:
         disc_num = af.current_tags.disc_number or 1
         disc_folder = new_base / generate_disc_folder_name(disc_num)
-        move_result = fm.move_file_to_disc_folder(af.file_path, str(disc_folder), dry_run)
+        move_result = organizer.move_file_to_disc_folder(
+            af.file_path, str(disc_folder), dry_run
+        )
         if not move_result.success:
             errors.append(move_result.message)
 
     if errors:
-        return False, f"Partial success. Errors:\n" + "\n".join(errors)
+        return False, "Partial success. Errors:\n" + "\n".join(errors)
 
     try:
         old_folder = Path(folder_path)
