@@ -3,8 +3,37 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Protocol, TypedDict
 from dotenv import load_dotenv
+
+
+class AppConfig(TypedDict):
+    acrcloud_host: Optional[str]
+    acrcloud_access_key: Optional[str]
+    acrcloud_access_secret: Optional[str]
+    discogs_user_token: Optional[str]
+
+
+class AppArgs(Protocol):
+    path: str
+    recursive: bool
+    include_root: bool
+    start_at: Optional[str]
+    dry_run: bool
+    yes: bool
+    force: bool
+    skip_acr: bool
+    skip_discogs: bool
+    rename_only: bool
+    no_rename: bool
+    no_file_rename: bool
+    mirror_onedrive: bool
+    onedrive_root: Optional[str]
+    onedrive_remote: str
+    rclone_path: Optional[str]
+    env_file: str
+    no_color: bool
+    quiet: bool
 
 
 def eprint(*args, **kwargs):
@@ -12,7 +41,7 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def load_config(env_file: Optional[str] = None) -> dict:
+def load_config(env_file: Optional[str] = None) -> AppConfig:
     """
     Load configuration from .env file.
 
@@ -45,8 +74,9 @@ def load_config(env_file: Optional[str] = None) -> dict:
     }
 
 
-def validate_config(config: dict, skip_acr: bool = False,
-                    skip_discogs: bool = False) -> List[str]:
+def validate_config(
+    config: AppConfig, skip_acr: bool = False, skip_discogs: bool = False
+) -> List[str]:
     """
     Validate configuration and return list of missing credentials.
 

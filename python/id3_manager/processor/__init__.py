@@ -14,6 +14,7 @@ from models import (
 )
 from id3_handler import ID3Handler
 from folder_manager import FolderManager
+from config import AppArgs, AppConfig
 from interactive import InteractivePrompts
 from onedrive_sync import OneDriveSync
 from acrcloud_client import ACRCloudClient
@@ -27,7 +28,7 @@ from . import finalize as _finalize
 class ID3Processor:
     """Main processor for ID3 tag management."""
 
-    def __init__(self, config: dict, args, prompts: InteractivePrompts):
+    def __init__(self, config: AppConfig, args: AppArgs, prompts: InteractivePrompts):
         self.config = config
         self.args = args
         self.prompts = prompts

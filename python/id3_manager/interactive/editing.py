@@ -19,12 +19,14 @@ def handle_edit_track(ui, audio_files: List[AudioFile]) -> None:
         title = af.proposed_tags.title if af.proposed_tags else "(no proposed tags)"
         print(f"  [{i}] {filename}")
         print(f"      Proposed title: {title}")
-    print(f"  [c] Cancel")
+    print("  [c] Cancel")
 
     while True:
-        choice = input(
-            f"\n{ui._c('bold', f'Select track [1-{len(editable_files)}/c]: ')} "
-        ).strip().lower()
+        choice = (
+            input(f"\n{ui._c('bold', f'Select track [1-{len(editable_files)}/c]: ')} ")
+            .strip()
+            .lower()
+        )
         if choice == "c":
             return
         try:
@@ -43,13 +45,17 @@ def edit_collision_files(ui, collisions: CollisionMap) -> None:
     print(f"\n{ui._c('cyan', 'Select a file to edit:')}")
     for i, af in enumerate(files, 1):
         tags = af.proposed_tags or af.current_tags
-        print(f"  [{i}] {Path(af.file_path).name}  ->  track {tags.track_number}, {tags.title}")
-    print(f"  [c] Cancel (back to collision menu)")
+        print(
+            f"  [{i}] {Path(af.file_path).name}  ->  track {tags.track_number}, {tags.title}"
+        )
+    print("  [c] Cancel (back to collision menu)")
 
     while True:
-        choice = input(
-            f"\n{ui._c('bold', f'Select file [1-{len(files)}/c]: ')} "
-        ).strip().lower()
+        choice = (
+            input(f"\n{ui._c('bold', f'Select file [1-{len(files)}/c]: ')} ")
+            .strip()
+            .lower()
+        )
         if choice == "c":
             return
         try:
@@ -72,12 +78,13 @@ def handle_edit_album(ui, audio_files: List[AudioFile]) -> None:
         return
 
     fields = {
-        'b': ('Album',        'album',        False),
-        'l': ('Album Artist', 'album_artist', False),
-        'y': ('Year',         'year',         True),
-        'g': ('Genre',        'genre',        False),
-        'N': ('Total Tracks', 'total_tracks', True),
-        'D': ('Total Discs',  'total_discs',  True),
+        "a": ("Artist", "artist", False),
+        "b": ("Album", "album", False),
+        "l": ("Album Artist", "album_artist", False),
+        "y": ("Year", "year", True),
+        "g": ("Genre", "genre", False),
+        "N": ("Total Tracks", "total_tracks", True),
+        "D": ("Total Discs", "total_discs", True),
     }
 
     ref = editable_files[0].proposed_tags
@@ -88,7 +95,7 @@ def handle_edit_album(ui, audio_files: List[AudioFile]) -> None:
             value = getattr(ref, attr_name)
             value_str = str(value) if value is not None else ui._c("dim", "(empty)")
             print(f"  [{key}] {display_name}: {value_str}")
-        print(f"  [x] Done")
+        print("  [x] Done")
 
         choice = input(f"\n{ui._c('bold', 'Select field to edit: ')} ").strip()
         if choice == "x":
@@ -118,7 +125,11 @@ def handle_edit_album(ui, audio_files: List[AudioFile]) -> None:
 
         for af in editable_files:
             setattr(af.proposed_tags, attr_name, parsed)
-        print(ui._c("green", f"  {display_name} updated on {len(editable_files)} track(s)."))
+        print(
+            ui._c(
+                "green", f"  {display_name} updated on {len(editable_files)} track(s)."
+            )
+        )
 
 
 def edit_track_fields(ui, audio_file: AudioFile) -> None:
@@ -130,16 +141,16 @@ def edit_track_fields(ui, audio_file: AudioFile) -> None:
     filename = Path(audio_file.file_path).name
 
     fields = {
-        't': ('Title', 'title', False),
-        'a': ('Artist', 'artist', False),
-        'b': ('Album', 'album', False),
-        'l': ('Album Artist', 'album_artist', False),
-        'n': ('Track Number', 'track_number', True),
-        'N': ('Total Tracks', 'total_tracks', True),
-        'd': ('Disc Number', 'disc_number', True),
-        'D': ('Total Discs', 'total_discs', True),
-        'y': ('Year', 'year', True),
-        'g': ('Genre', 'genre', False),
+        "t": ("Title", "title", False),
+        "a": ("Artist", "artist", False),
+        "b": ("Album", "album", False),
+        "l": ("Album Artist", "album_artist", False),
+        "n": ("Track Number", "track_number", True),
+        "N": ("Total Tracks", "total_tracks", True),
+        "d": ("Disc Number", "disc_number", True),
+        "D": ("Total Discs", "total_discs", True),
+        "y": ("Year", "year", True),
+        "g": ("Genre", "genre", False),
     }
 
     while True:
@@ -149,7 +160,7 @@ def edit_track_fields(ui, audio_file: AudioFile) -> None:
             value = getattr(proposed, attr_name)
             value_str = str(value) if value is not None else ui._c("dim", "(empty)")
             print(f"  [{key}] {display_name}: {value_str}")
-        print(f"  [x] Done editing this track")
+        print("  [x] Done editing this track")
 
         choice = input(f"\n{ui._c('bold', 'Select field to edit: ')} ").strip()
         if choice == "x":
