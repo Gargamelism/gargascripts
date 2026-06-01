@@ -1,14 +1,6 @@
 
-
-args and config should be typedclass ID3Processor:
-    """Main processor for ID3 tag management."""
-
-    def __init__(self, config: dict, args, prompts: InteractivePrompts):
-
-
-what is proc def process_files(proc, audio_files: List[AudioFile]) -> None:
-why is it calling private methods like proc._process_file(audio_file) and proc._finalize()?
-
 for action loops use match case instead of if elif else
 
 OneDriveSync -> protocol
+
+Create a mermaid flow chart explaining all app flows

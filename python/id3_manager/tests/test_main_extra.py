@@ -11,7 +11,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import ID3Processor, main
 from models import (
-    AudioFile, TrackMetadata, DiscTrack, DiscogsRelease, DiscogsTrack, AlbumFolder,
+    AudioFile,
+    TrackMetadata,
+    DiscTrack,
+    DiscogsRelease,
+    DiscogsTrack,
+    AlbumFolder,
     ConfirmAction,
 )
 from sync_results import CommitResult, MoveResult
@@ -20,6 +25,7 @@ from sync_results import CommitResult, MoveResult
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def args():
@@ -85,13 +91,25 @@ def _proc(config, args, prompts):
     return ID3Processor(config, args, prompts)
 
 
-def _af(title="Song", artist="A", album="B", track=1, disc=1, total_discs=None, path="/f/s.mp3"):
+def _af(
+    title="Song",
+    artist="A",
+    album="B",
+    track=1,
+    disc=1,
+    total_discs=None,
+    path="/f/s.mp3",
+):
     return AudioFile(
         file_path=path,
         format="mp3",
         current_tags=TrackMetadata(
-            title=title, artist=artist, album=album,
-            track_number=track, disc_number=disc, total_discs=total_discs,
+            title=title,
+            artist=artist,
+            album=album,
+            track_number=track,
+            disc_number=disc,
+            total_discs=total_discs,
         ),
     )
 
@@ -112,12 +130,17 @@ def _proposed(af, track=None, disc=None, title=None):
 # _detect_track_collisions
 # ---------------------------------------------------------------------------
 
+
 class TestDetectTrackCollisions:
     """Collision = two files propose the same (disc, track) number."""
 
     def test_no_collisions_unique_tracks(self, config, args, prompts):
         p = _proc(config, args, prompts)
-        files = [_af(track=1), _af(track=2, path="/f/b.mp3"), _af(track=3, path="/f/c.mp3")]
+        files = [
+            _af(track=1),
+            _af(track=2, path="/f/b.mp3"),
+            _af(track=3, path="/f/c.mp3"),
+        ]
         assert p._detect_track_collisions(files) == {}
 
     def test_detects_two_files_same_disc_track(self, config, args, prompts):
@@ -148,18 +171,30 @@ class TestDetectTrackCollisions:
 
     def test_files_without_track_number_excluded(self, config, args, prompts):
         p = _proc(config, args, prompts)
-        a = AudioFile(file_path="/f/a.mp3", format="mp3",
-                      current_tags=TrackMetadata(track_number=None))
-        b = AudioFile(file_path="/f/b.mp3", format="mp3",
-                      current_tags=TrackMetadata(track_number=None))
+        a = AudioFile(
+            file_path="/f/a.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(track_number=None),
+        )
+        b = AudioFile(
+            file_path="/f/b.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(track_number=None),
+        )
         assert p._detect_track_collisions([a, b]) == {}
 
     def test_null_disc_treated_as_disc_1(self, config, args, prompts):
         p = _proc(config, args, prompts)
-        a = AudioFile(file_path="/f/a.mp3", format="mp3",
-                      current_tags=TrackMetadata(track_number=1, disc_number=None))
-        b = AudioFile(file_path="/f/b.mp3", format="mp3",
-                      current_tags=TrackMetadata(track_number=1, disc_number=1))
+        a = AudioFile(
+            file_path="/f/a.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(track_number=1, disc_number=None),
+        )
+        b = AudioFile(
+            file_path="/f/b.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(track_number=1, disc_number=1),
+        )
         collisions = p._detect_track_collisions([a, b])
         assert DiscTrack(disc=1, track=1) in collisions
 
@@ -170,11 +205,13 @@ class TestDetectTrackCollisions:
         key = DiscTrack(disc=1, track=2)
         assert len(collisions[key]) == 3
 
-    def test_partial_collision_only_colliding_group_returned(self, config, args, prompts):
+    def test_partial_collision_only_colliding_group_returned(
+        self, config, args, prompts
+    ):
         p = _proc(config, args, prompts)
         a = _af(track=1, path="/f/a.mp3")
-        b = _af(track=1, path="/f/b.mp3")   # collides with a
-        c = _af(track=2, path="/f/c.mp3")   # unique
+        b = _af(track=1, path="/f/b.mp3")  # collides with a
+        c = _af(track=2, path="/f/c.mp3")  # unique
         collisions = p._detect_track_collisions([a, b, c])
         assert len(collisions) == 1
         assert DiscTrack(disc=1, track=1) in collisions
@@ -185,12 +222,21 @@ class TestDetectTrackCollisions:
 # _process_files — collision resolution flow
 # ---------------------------------------------------------------------------
 
+
 class TestProcessFilesCollisionFlow:
     def _release_with_track(self, n=2):
-        tracks = [DiscogsTrack(position=str(i), title=f"T{i}", track_number=i, disc_number=1)
-                  for i in range(1, n + 1)]
-        return DiscogsRelease(release_id=1, title="A", artists=["A"],
-                              year=2020, tracklist=tracks, total_discs=1)
+        tracks = [
+            DiscogsTrack(position=str(i), title=f"T{i}", track_number=i, disc_number=1)
+            for i in range(1, n + 1)
+        ]
+        return DiscogsRelease(
+            release_id=1,
+            title="A",
+            artists=["A"],
+            year=2020,
+            tracklist=tracks,
+            total_discs=1,
+        )
 
     def test_collision_skip_clears_proposed_tags(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -284,6 +330,7 @@ class TestProcessFilesCollisionFlow:
 # _process_files — confirm_tag_changes paths
 # ---------------------------------------------------------------------------
 
+
 class TestProcessFilesConfirmation:
     def test_apply_calls_write_tags(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -333,6 +380,7 @@ class TestProcessFilesConfirmation:
 # _process_single_file
 # ---------------------------------------------------------------------------
 
+
 class TestProcessSingleFile:
     def test_unsupported_format_prints_and_returns(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -351,15 +399,20 @@ class TestProcessSingleFile:
 
         af_holder = [None]
 
-        def fake_process(af, folder_release=None):
-            af.proposed_tags = TrackMetadata(title="New", artist="A", album="B", track_number=1)
+        def fake_process(proc, af, folder_release=None):
+            af.proposed_tags = TrackMetadata(
+                title="New", artist="A", album="B", track_number=1
+            )
             af_holder[0] = af
             return folder_release
 
-        with patch("main.ID3Handler.is_supported", return_value=True), \
-             patch("main.ID3Handler.get_format", return_value="mp3"), \
-             patch.object(p, "_process_single_file_obj", side_effect=fake_process):
-
+        with (
+            patch("main.ID3Handler.is_supported", return_value=True),
+            patch("main.ID3Handler.get_format", return_value="mp3"),
+            patch(
+                "processor.dispatch.process_single_file_obj", side_effect=fake_process
+            ),
+        ):
             prompts.confirm_tag_changes.return_value = ConfirmAction.APPLY
             p._process_single_file("/f/song.mp3")
 
@@ -370,13 +423,19 @@ class TestProcessSingleFile:
         p.id3_handler = Mock()
         p.id3_handler.read_tags = Mock(return_value=TrackMetadata())
 
-        def fake_process(af, folder_release=None):
-            af.proposed_tags = TrackMetadata(title="New", artist="A", album="B", track_number=1)
+        def fake_process(proc, af, folder_release=None):
+            af.proposed_tags = TrackMetadata(
+                title="New", artist="A", album="B", track_number=1
+            )
             return folder_release
 
-        with patch("main.ID3Handler.is_supported", return_value=True), \
-             patch("main.ID3Handler.get_format", return_value="mp3"), \
-             patch.object(p, "_process_single_file_obj", side_effect=fake_process):
+        with (
+            patch("main.ID3Handler.is_supported", return_value=True),
+            patch("main.ID3Handler.get_format", return_value="mp3"),
+            patch(
+                "processor.dispatch.process_single_file_obj", side_effect=fake_process
+            ),
+        ):
             prompts.confirm_tag_changes.return_value = ConfirmAction.QUIT
             with pytest.raises(SystemExit):
                 p._process_single_file("/f/song.mp3")
@@ -384,18 +443,20 @@ class TestProcessSingleFile:
     def test_no_changes_but_needs_rename(self, config, args, prompts):
         p = _proc(config, args, prompts)
         p.id3_handler = Mock()
-        p.id3_handler.read_tags = Mock(return_value=TrackMetadata(
-            title="T", artist="A", album="B", track_number=1
-        ))
+        p.id3_handler.read_tags = Mock(
+            return_value=TrackMetadata(title="T", artist="A", album="B", track_number=1)
+        )
         p.folder_manager = Mock()
         p.folder_manager.should_rename_file = Mock(return_value=True)
         p.folder_manager.generate_filename = Mock(return_value="new.mp3")
         p.folder_manager.rename_audio_file = Mock(return_value=CommitResult(True, "ok"))
 
-        with patch("main.ID3Handler.is_supported", return_value=True), \
-             patch("main.ID3Handler.get_format", return_value="mp3"), \
-             patch.object(p, "_process_single_file_obj", return_value=None), \
-             patch("models.file_needs_rename", return_value=True):
+        with (
+            patch("main.ID3Handler.is_supported", return_value=True),
+            patch("main.ID3Handler.get_format", return_value="mp3"),
+            patch.object(p, "_process_single_file_obj", return_value=None),
+            patch("models.file_needs_rename", return_value=True),
+        ):
             prompts.confirm_file_renames.return_value = True
             p._process_single_file("/f/song.mp3")
 
@@ -405,6 +466,7 @@ class TestProcessSingleFile:
 # ---------------------------------------------------------------------------
 # process() dispatch
 # ---------------------------------------------------------------------------
+
 
 class TestProcess:
     def test_single_file_dispatches(self, config, args, prompts, tmp_path):
@@ -443,6 +505,7 @@ class TestProcess:
 # _process_folder — multi-disc path
 # ---------------------------------------------------------------------------
 
+
 class TestProcessFolderMultiDisc:
     def test_multi_disc_processes_each_disc(self, config, args, prompts, tmp_path):
         disc1 = tmp_path / "CD1"
@@ -452,20 +515,34 @@ class TestProcessFolderMultiDisc:
 
         p = _proc(config, args, prompts)
         p.folder_manager = Mock()
-        p.folder_manager.detect_multi_disc_structure = Mock(return_value=[
-            AlbumFolder(folder_path=str(disc1), detected_disc_number=1, parent_folder=str(tmp_path)),
-            AlbumFolder(folder_path=str(disc2), detected_disc_number=2, parent_folder=str(tmp_path)),
-        ])
+        p.folder_manager.detect_multi_disc_structure = Mock(
+            return_value=[
+                AlbumFolder(
+                    folder_path=str(disc1),
+                    detected_disc_number=1,
+                    parent_folder=str(tmp_path),
+                ),
+                AlbumFolder(
+                    folder_path=str(disc2),
+                    detected_disc_number=2,
+                    parent_folder=str(tmp_path),
+                ),
+            ]
+        )
         p.folder_manager.normalize_disc_folder_name = Mock(
             side_effect=lambda path, disc, dry_run=False: CommitResult(True, path)
         )
         p.folder_manager.is_folder_properly_named = Mock(return_value=True)
 
         def fake_discover(folder_path):
-            return [_af(disc=1 if "CD1" in folder_path else 2, path=folder_path + "/s.mp3")]
+            return [
+                _af(disc=1 if "CD1" in folder_path else 2, path=folder_path + "/s.mp3")
+            ]
 
-        with patch.object(p, "_discover_audio_files", side_effect=fake_discover), \
-             patch.object(p, "_process_disc") as mock_disc:
+        with (
+            patch.object(p, "_discover_audio_files", side_effect=fake_discover),
+            patch.object(p, "_process_disc") as mock_disc,
+        ):
             p._process_folder(str(tmp_path))
 
         assert mock_disc.call_count == 2
@@ -473,10 +550,15 @@ class TestProcessFolderMultiDisc:
     def test_empty_folder_prints_message(self, config, args, prompts, tmp_path):
         p = _proc(config, args, prompts)
         p.folder_manager = Mock()
-        p.folder_manager.detect_multi_disc_structure = Mock(return_value=[
-            AlbumFolder(folder_path=str(tmp_path), detected_disc_number=None,
-                        parent_folder=str(tmp_path.parent))
-        ])
+        p.folder_manager.detect_multi_disc_structure = Mock(
+            return_value=[
+                AlbumFolder(
+                    folder_path=str(tmp_path),
+                    detected_disc_number=None,
+                    parent_folder=str(tmp_path.parent),
+                )
+            ]
+        )
 
         with patch.object(p, "_discover_audio_files", return_value=[]):
             p._process_folder(str(tmp_path))
@@ -490,6 +572,7 @@ class TestProcessFolderMultiDisc:
 # _process_disc
 # ---------------------------------------------------------------------------
 
+
 class TestProcessDisc:
     def test_sets_disc_number_for_files_missing_it(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -499,7 +582,8 @@ class TestProcessDisc:
             folder_path="/disc", detected_disc_number=2, parent_folder="/album"
         )
         af = AudioFile(
-            file_path="/disc/s.mp3", format="mp3",
+            file_path="/disc/s.mp3",
+            format="mp3",
             current_tags=TrackMetadata(title="T", artist="A", album="B"),
         )
 
@@ -513,6 +597,7 @@ class TestProcessDisc:
 # ---------------------------------------------------------------------------
 # _process_single_file_obj — no-ACR paths
 # ---------------------------------------------------------------------------
+
 
 class TestProcessSingleFileObjNoACR:
     def test_returns_folder_release_when_no_acr_result(self, config, args, prompts):
@@ -558,7 +643,8 @@ class TestProcessSingleFileObjNoACR:
 
         # No track_number → needs_processing=True; has artist so skips get_modified_search_query
         af = AudioFile(
-            file_path="/f/s.mp3", format="mp3",
+            file_path="/f/s.mp3",
+            format="mp3",
             current_tags=TrackMetadata(title="Song", artist="Artist", album="Album"),
         )
         p._process_single_file_obj(af)
@@ -573,10 +659,13 @@ class TestProcessSingleFileObjNoACR:
         p.discogs_client = None
 
         prompts.handle_no_acr_match.return_value = "existing"
-        prompts.get_modified_search_query = Mock(return_value=("", ""))  # no artist → skip
+        prompts.get_modified_search_query = Mock(
+            return_value=("", "")
+        )  # no artist → skip
 
         af = AudioFile(
-            file_path="/f/s.mp3", format="mp3",
+            file_path="/f/s.mp3",
+            format="mp3",
             current_tags=TrackMetadata(title="Song", artist=None, album="Album"),
         )
         p._process_single_file_obj(af)
@@ -613,6 +702,7 @@ class TestProcessSingleFileObjNoACR:
 # _process_single_file_obj — discogs cached release paths
 # ---------------------------------------------------------------------------
 
+
 class TestProcessSingleFileObjCachedRelease:
     def _make_acr(self, title="Song", artist="Artist", album="Album"):
         return Mock(title=title, artists=[artist], album=album, confidence=0.9)
@@ -620,8 +710,12 @@ class TestProcessSingleFileObjCachedRelease:
     def _make_release(self, title="Album"):
         track = DiscogsTrack(position="1", title="Song", track_number=1, disc_number=1)
         return DiscogsRelease(
-            release_id=1, title=title, artists=["Artist"],
-            year=2020, tracklist=[track], total_discs=1,
+            release_id=1,
+            title=title,
+            artists=["Artist"],
+            year=2020,
+            tracklist=[track],
+            total_discs=1,
         )
 
     def test_uses_cached_release_when_track_matches(self, config, args, prompts):
@@ -633,13 +727,17 @@ class TestProcessSingleFileObjCachedRelease:
         p.acr_client = Mock()
         p.acr_client.recognize_with_retry = Mock(return_value=acr)
 
-        with patch.object(p, "_match_track_from_cached_release", return_value=True) as mock_m:
+        with patch(
+            "processor.matching.match_track_from_cached_release", return_value=True
+        ) as mock_m:
             result = p._process_single_file_obj(_af(track=None), folder_release=release)
 
         mock_m.assert_called_once()
         assert result is release
 
-    def test_no_match_in_cached_release_handle_not_in_release(self, config, args, prompts):
+    def test_no_match_in_cached_release_handle_not_in_release(
+        self, config, args, prompts
+    ):
         args.skip_acr = False
         p = _proc(config, args, prompts)
         p.discogs_client = Mock()
@@ -650,7 +748,9 @@ class TestProcessSingleFileObjCachedRelease:
 
         prompts.handle_track_not_in_release.return_value = "skip"
 
-        with patch.object(p, "_match_track_from_cached_release", return_value=False):
+        with patch(
+            "processor.matching.match_track_from_cached_release", return_value=False
+        ):
             result = p._process_single_file_obj(_af(track=None), folder_release=release)
 
         assert p.stats.files_skipped == 1
@@ -668,8 +768,14 @@ class TestProcessSingleFileObjCachedRelease:
 
         prompts.handle_track_not_in_release.return_value = "search"
 
-        with patch.object(p, "_match_track_from_cached_release", return_value=False), \
-             patch.object(p, "_search_and_match_discogs", return_value=new_release):
+        with (
+            patch(
+                "processor.matching.match_track_from_cached_release", return_value=False
+            ),
+            patch(
+                "processor.matching.search_and_match_discogs", return_value=new_release
+            ),
+        ):
             result = p._process_single_file_obj(_af(track=None), folder_release=release)
 
         assert result is new_release
@@ -685,7 +791,9 @@ class TestProcessSingleFileObjCachedRelease:
 
         prompts.handle_track_not_in_release.return_value = "quit"
 
-        with patch.object(p, "_match_track_from_cached_release", return_value=False):
+        with patch(
+            "processor.matching.match_track_from_cached_release", return_value=False
+        ):
             with pytest.raises(SystemExit):
                 p._process_single_file_obj(_af(track=None), folder_release=release)
 
@@ -693,6 +801,7 @@ class TestProcessSingleFileObjCachedRelease:
 # ---------------------------------------------------------------------------
 # _search_and_match_discogs — early exits
 # ---------------------------------------------------------------------------
+
 
 class TestSearchAndMatchDiscogsEarlyExit:
     def test_no_artist_returns_none(self, config, args, prompts):
@@ -764,12 +873,17 @@ class TestSearchAndMatchDiscogsEarlyExit:
 # _search_and_match_discogs — manual_url in release selection
 # ---------------------------------------------------------------------------
 
+
 class TestSearchAndMatchDiscogsManualUrl:
     def _make_release(self, title="Album"):
         track = DiscogsTrack(position="1", title="Song", track_number=1, disc_number=1)
         return DiscogsRelease(
-            release_id=1, title=title, artists=["Artist"],
-            year=2020, tracklist=[track], total_discs=1,
+            release_id=1,
+            title=title,
+            artists=["Artist"],
+            year=2020,
+            tracklist=[track],
+            total_discs=1,
         )
 
     def test_manual_url_in_candidate_selection(self, config, args, prompts):
@@ -828,20 +942,30 @@ class TestSearchAndMatchDiscogsManualUrl:
 # _match_track_from_cached_release — force path
 # ---------------------------------------------------------------------------
 
+
 class TestMatchTrackFromCachedReleaseForce:
-    def test_force_override_declined_returns_true_no_proposed_change(self, config, args, prompts):
+    def test_force_override_declined_returns_true_no_proposed_change(
+        self, config, args, prompts
+    ):
         args.force = True
         p = _proc(config, args, prompts)
 
         complete_tags = TrackMetadata(
-            title="T", artist="A", album="B", track_number=5,
+            title="T",
+            artist="A",
+            album="B",
+            track_number=5,
         )
         af = AudioFile(file_path="/f/s.mp3", format="mp3", current_tags=complete_tags)
 
         track = DiscogsTrack(position="1", title="T", track_number=1, disc_number=1)
         release = DiscogsRelease(
-            release_id=1, title="B", artists=["A"],
-            year=2020, tracklist=[track], total_discs=1,
+            release_id=1,
+            title="B",
+            artists=["A"],
+            year=2020,
+            tracklist=[track],
+            total_discs=1,
         )
 
         p.discogs_client = Mock()
@@ -849,7 +973,9 @@ class TestMatchTrackFromCachedReleaseForce:
         prompts.confirm_force_override.return_value = False
         prompts.prompt_missing_fields.side_effect = lambda m, f: m
 
-        result = p._match_track_from_cached_release(af, release, Mock(title="T", artists=["A"]))
+        result = p._match_track_from_cached_release(
+            af, release, Mock(title="T", artists=["A"])
+        )
         assert result is True
         assert af.proposed_tags is None  # not set when override declined
 
@@ -857,6 +983,7 @@ class TestMatchTrackFromCachedReleaseForce:
 # ---------------------------------------------------------------------------
 # _apply_tag_changes — RuntimeError path
 # ---------------------------------------------------------------------------
+
 
 class TestApplyTagChangesRuntimeError:
     def test_runtime_error_stops_processing_records_error(self, config, args, prompts):
@@ -881,6 +1008,7 @@ class TestApplyTagChangesRuntimeError:
 # ---------------------------------------------------------------------------
 # _push_tag_writes_to_onedrive
 # ---------------------------------------------------------------------------
+
 
 class TestPushTagWritesToOneDrive:
     def test_skips_when_no_onedrive_sync(self, config, args, prompts):
@@ -919,6 +1047,7 @@ class TestPushTagWritesToOneDrive:
 # _backfill_disc_info
 # ---------------------------------------------------------------------------
 
+
 class TestBackfillDiscInfo:
     def test_fills_disc_info_from_path(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -946,6 +1075,7 @@ class TestBackfillDiscInfo:
 # ---------------------------------------------------------------------------
 # _handle_file_renames
 # ---------------------------------------------------------------------------
+
 
 class TestHandleFileRenames:
     def test_generate_filename_none_skips(self, config, args, prompts):
@@ -1017,6 +1147,7 @@ class TestHandleFileRenames:
 # _handle_folder_rename
 # ---------------------------------------------------------------------------
 
+
 class TestHandleFolderRename:
     def test_skips_when_already_properly_named(self, config, args, prompts, tmp_path):
         p = _proc(config, args, prompts)
@@ -1075,7 +1206,9 @@ class TestHandleFolderRename:
         p.folder_manager.get_album_info_from_files = Mock(return_value=(2020, "Album"))
         p.folder_manager.detect_multi_disc_from_metadata = Mock(return_value=2)
         p.folder_manager.generate_folder_name = Mock(return_value="2020 - Album")
-        p.folder_manager.reorganize_multi_disc_album = Mock(return_value=(True, "2020 - Album"))
+        p.folder_manager.reorganize_multi_disc_album = Mock(
+            return_value=(True, "2020 - Album")
+        )
 
         prompts.confirm_folder_rename.return_value = True
         p._handle_folder_rename(str(tmp_path), [])
@@ -1090,7 +1223,9 @@ class TestHandleFolderRename:
         p.folder_manager.get_album_info_from_files = Mock(return_value=(2020, "Album"))
         p.folder_manager.detect_multi_disc_from_metadata = Mock(return_value=1)
         p.folder_manager.generate_folder_name = Mock(return_value="2020 - Album")
-        p.folder_manager.rename_folder = Mock(return_value=CommitResult(False, "locked"))
+        p.folder_manager.rename_folder = Mock(
+            return_value=CommitResult(False, "locked")
+        )
 
         prompts.confirm_folder_rename.return_value = True
         p._handle_folder_rename(str(tmp_path / "Old"), [])
@@ -1103,6 +1238,7 @@ class TestHandleFolderRename:
 # _discover_audio_files — malformed file handling
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverAudioFilesMalformed:
     def test_malformed_file_tracked_and_skipped(self, config, args, prompts, tmp_path):
         p = _proc(config, args, prompts)
@@ -1112,8 +1248,10 @@ class TestDiscoverAudioFilesMalformed:
         p.id3_handler = Mock()
         p.id3_handler.read_tags = Mock(side_effect=Exception("corrupt"))
 
-        with patch("main.ID3Handler.is_supported", return_value=True), \
-             patch("main.ID3Handler.get_format", return_value="mp3"):
+        with (
+            patch("main.ID3Handler.is_supported", return_value=True),
+            patch("main.ID3Handler.get_format", return_value="mp3"),
+        ):
             files = p._discover_audio_files(str(tmp_path))
 
         assert files == []
@@ -1123,6 +1261,7 @@ class TestDiscoverAudioFilesMalformed:
 # ---------------------------------------------------------------------------
 # _process_recursive
 # ---------------------------------------------------------------------------
+
 
 class TestProcessRecursive:
     def test_finds_and_processes_subfolders(self, config, args, prompts, tmp_path):
@@ -1135,8 +1274,10 @@ class TestProcessRecursive:
         p = _proc(config, args, prompts)
         processed = []
 
-        with patch.object(p, "_process_folder", side_effect=processed.append), \
-             patch("main.ID3Handler.SUPPORTED_EXTENSIONS", [".mp3"]):
+        with (
+            patch.object(p, "_process_folder", side_effect=processed.append),
+            patch("main.ID3Handler.SUPPORTED_EXTENSIONS", [".mp3"]),
+        ):
             p._process_recursive(str(tmp_path))
 
         assert str(sub) in processed
@@ -1149,8 +1290,10 @@ class TestProcessRecursive:
         p = _proc(config, args, prompts)
         processed = []
 
-        with patch.object(p, "_process_folder", side_effect=processed.append), \
-             patch("main.ID3Handler.SUPPORTED_EXTENSIONS", [".mp3"]):
+        with (
+            patch.object(p, "_process_folder", side_effect=processed.append),
+            patch("main.ID3Handler.SUPPORTED_EXTENSIONS", [".mp3"]),
+        ):
             p._process_recursive(str(tmp_path))
 
         assert str(tmp_path) not in processed
@@ -1159,6 +1302,7 @@ class TestProcessRecursive:
 # ---------------------------------------------------------------------------
 # _filter_folders_from_start — parent fallback
 # ---------------------------------------------------------------------------
+
 
 class TestFilterFoldersFromStartParentFallback:
     def test_start_at_parent_of_subfolder(self, config, args, prompts, tmp_path):
@@ -1181,13 +1325,16 @@ class TestFilterFoldersFromStartParentFallback:
 # main() function
 # ---------------------------------------------------------------------------
 
+
 class TestMainFunction:
     def test_missing_config_exits(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.touch()
-        with patch("sys.argv", ["main.py", str(f), "--skip-discogs"]), \
-             patch("main.load_config", return_value={}), \
-             patch("main.validate_config", return_value=["ACRCLOUD_ACCESS_KEY"]):
+        with (
+            patch("sys.argv", ["main.py", str(f), "--skip-discogs"]),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=["ACRCLOUD_ACCESS_KEY"]),
+        ):
             with pytest.raises(SystemExit) as exc:
                 main()
             assert exc.value.code == 1
@@ -1201,19 +1348,23 @@ class TestMainFunction:
         f = tmp_path / "song.mp3"
         f.touch()
         start = tmp_path
-        with patch("sys.argv", ["main.py", str(f), "--start-at", str(start)]), \
-             patch("main.load_config", return_value={}), \
-             patch("main.validate_config", return_value=[]), \
-             patch("main.InteractivePrompts"), \
-             patch("main.ID3Processor") as MockProc:
+        with (
+            patch("sys.argv", ["main.py", str(f), "--start-at", str(start)]),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=[]),
+            patch("main.InteractivePrompts"),
+            patch("main.ID3Processor") as MockProc,
+        ):
             MockProc.return_value.process = Mock()
             main()  # should not raise — warning only
 
     def test_start_at_nonexistent_exits(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.touch()
-        with patch("sys.argv", ["main.py", str(f), "--recursive",
-                                 "--start-at", str(tmp_path / "nope")]):
+        with patch(
+            "sys.argv",
+            ["main.py", str(f), "--recursive", "--start-at", str(tmp_path / "nope")],
+        ):
             with pytest.raises(SystemExit):
                 main()
 
@@ -1227,19 +1378,29 @@ class TestMainFunction:
     def test_mirror_onedrive_nonexistent_root_exits(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.touch()
-        with patch("sys.argv", ["main.py", str(f), "--mirror-onedrive",
-                                 "--onedrive-root", str(tmp_path / "nope")]):
+        with patch(
+            "sys.argv",
+            [
+                "main.py",
+                str(f),
+                "--mirror-onedrive",
+                "--onedrive-root",
+                str(tmp_path / "nope"),
+            ],
+        ):
             with pytest.raises(SystemExit):
                 main()
 
     def test_keyboard_interrupt_exits(self, tmp_path):
         f = tmp_path / "song.mp3"
         f.touch()
-        with patch("sys.argv", ["main.py", str(f), "--skip-acr", "--skip-discogs"]), \
-             patch("main.load_config", return_value={}), \
-             patch("main.validate_config", return_value=[]), \
-             patch("main.InteractivePrompts"), \
-             patch("main.ID3Processor") as MockProc:
+        with (
+            patch("sys.argv", ["main.py", str(f), "--skip-acr", "--skip-discogs"]),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=[]),
+            patch("main.InteractivePrompts"),
+            patch("main.ID3Processor") as MockProc,
+        ):
             MockProc.return_value.process = Mock(side_effect=KeyboardInterrupt)
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1249,11 +1410,13 @@ class TestMainFunction:
         f = tmp_path / "song.mp3"
         f.touch()
         captured_args = []
-        with patch("sys.argv", ["main.py", str(f), "--rename-only"]), \
-             patch("main.load_config", return_value={}), \
-             patch("main.validate_config", return_value=[]), \
-             patch("main.InteractivePrompts"), \
-             patch("main.ID3Processor") as MockProc:
+        with (
+            patch("sys.argv", ["main.py", str(f), "--rename-only"]),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=[]),
+            patch("main.InteractivePrompts"),
+            patch("main.ID3Processor") as MockProc,
+        ):
             MockProc.return_value.process = Mock()
 
             def capture_init(config, a, prompts):
@@ -1271,13 +1434,24 @@ class TestMainFunction:
         f.touch()
         onedrive_root = tmp_path  # exists and is a directory
         captured_args = []
-        with patch("sys.argv", ["main.py", str(f), "--mirror-onedrive",
-                                 "--onedrive-root", str(onedrive_root),
-                                 "--skip-acr", "--skip-discogs"]), \
-             patch("main.load_config", return_value={}), \
-             patch("main.validate_config", return_value=[]), \
-             patch("main.InteractivePrompts"), \
-             patch("main.ID3Processor") as MockProc:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "main.py",
+                    str(f),
+                    "--mirror-onedrive",
+                    "--onedrive-root",
+                    str(onedrive_root),
+                    "--skip-acr",
+                    "--skip-discogs",
+                ],
+            ),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=[]),
+            patch("main.InteractivePrompts"),
+            patch("main.ID3Processor") as MockProc,
+        ):
             MockProc.return_value.process = Mock()
 
             def capture_init(config, a, prompts):
