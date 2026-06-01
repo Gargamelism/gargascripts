@@ -12,7 +12,10 @@ from models import (
     TrackMetadata,
     ConfirmAction,
     CollisionMap,
+    CollisionResolutionAction,
     DiscogsRelease,
+    NoACRMatchAction,
+    TrackNotInReleaseAction,
 )
 from id3_handler import ID3Handler
 
@@ -36,18 +39,21 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
     conflicting: Set[AudioFile] = set()
     collisions: CollisionMap = _finalize.detect_track_collisions(proc, audio_files)
     while collisions:
-        action: str = proc.prompts.confirm_collision_resolution(collisions)
-        if action == "quit":
-            sys.exit(0)
-        if action == "edit":
-            proc.prompts.edit_collision_files(collisions)
-            collisions = _finalize.detect_track_collisions(proc, audio_files)
-            continue
-        if action == "skip":
-            conflicting = {af for grp in collisions.values() for af in grp}
-            for af in conflicting:
-                af.proposed_tags = None
-            proc.stats.files_skipped += len(conflicting)
+        action: CollisionResolutionAction = proc.prompts.confirm_collision_resolution(
+            collisions
+        )
+        match action:
+            case CollisionResolutionAction.QUIT:
+                sys.exit(0)
+            case CollisionResolutionAction.EDIT:
+                proc.prompts.edit_collision_files(collisions)
+                collisions = _finalize.detect_track_collisions(proc, audio_files)
+                continue
+            case CollisionResolutionAction.SKIP:
+                conflicting = {af for grp in collisions.values() for af in grp}
+                for af in conflicting:
+                    af.proposed_tags = None
+                proc.stats.files_skipped += len(conflicting)
         break
 
     files_with_changes = [af for af in audio_files if af.has_actual_changes]
@@ -126,44 +132,47 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
     if not acr_result and proc.acr_client:
         action = proc.prompts.handle_no_acr_match(af.file_path)
 
-        if action == "manual":
-            manual_tags = proc.prompts.get_manual_metadata(af.current_tags)
-            if manual_tags:
-                af.proposed_tags = manual_tags
-            else:
-                proc.stats.files_skipped += 1
-            return folder_release
-        elif action == "existing":
-            title = af.current_tags.title or ""
-            artist = af.current_tags.artist or ""
-            album = af.current_tags.album
+        match action:
+            case NoACRMatchAction.MANUAL:
+                manual_tags = proc.prompts.get_manual_metadata(af.current_tags)
+                if manual_tags:
+                    af.proposed_tags = manual_tags
+                else:
+                    proc.stats.files_skipped += 1
+                return folder_release
+            case NoACRMatchAction.EXISTING:
+                title = af.current_tags.title or ""
+                artist = af.current_tags.artist or ""
+                album = af.current_tags.album
 
-            if not artist:
-                proc.prompts.print(
-                    f"  Existing tags — title: '{title}', album: '{album or ''}'"
-                )
-                artist, title = proc.prompts.get_modified_search_query(artist, title)
+                if not artist:
+                    proc.prompts.print(
+                        f"  Existing tags — title: '{title}', album: '{album or ''}'"
+                    )
+                    artist, title = proc.prompts.get_modified_search_query(
+                        artist, title
+                    )
 
-            if artist:
-                acr_result = type(
-                    "ACRResult",
-                    (),
-                    {
-                        "title": title,
-                        "artists": [artist],
-                        "album": album,
-                        "confidence": 0.0,
-                    },
-                )()
-            else:
-                proc.prompts.print("  No artist provided, skipping.")
+                if artist:
+                    acr_result = type(
+                        "ACRResult",
+                        (),
+                        {
+                            "title": title,
+                            "artists": [artist],
+                            "album": album,
+                            "confidence": 0.0,
+                        },
+                    )()
+                else:
+                    proc.prompts.print("  No artist provided, skipping.")
+                    proc.stats.files_skipped += 1
+                    return folder_release
+            case NoACRMatchAction.SKIP:
                 proc.stats.files_skipped += 1
                 return folder_release
-        elif action == "skip":
-            proc.stats.files_skipped += 1
-            return folder_release
-        elif action == "quit":
-            sys.exit(0)
+            case NoACRMatchAction.QUIT:
+                sys.exit(0)
 
     if not acr_result:
         return folder_release
@@ -178,16 +187,17 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
                 action = proc.prompts.handle_track_not_in_release(
                     Path(af.file_path).name, folder_release.title
                 )
-                if action == "search":
-                    selected_release = _matching.search_and_match_discogs(
-                        proc, af, acr_result
-                    )
-                    return selected_release or folder_release
-                elif action == "skip":
-                    proc.stats.files_skipped += 1
-                    return folder_release
-                elif action == "quit":
-                    sys.exit(0)
+                match action:
+                    case TrackNotInReleaseAction.SEARCH:
+                        selected_release = _matching.search_and_match_discogs(
+                            proc, af, acr_result
+                        )
+                        return selected_release or folder_release
+                    case TrackNotInReleaseAction.SKIP:
+                        proc.stats.files_skipped += 1
+                        return folder_release
+                    case TrackNotInReleaseAction.QUIT:
+                        sys.exit(0)
         else:
             selected_release = _matching.search_and_match_discogs(proc, af, acr_result)
             return selected_release

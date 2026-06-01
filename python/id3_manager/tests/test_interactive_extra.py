@@ -10,8 +10,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from interactive import InteractivePrompts
 from models import (
-    AudioFile, TrackMetadata, DiscogsRelease, DiscogsTrack,
-    ProcessingStats, ACRCloudResult, ConfirmAction, CollisionMap, DiscTrack,
+    AudioFile,
+    TrackMetadata,
+    DiscogsRelease,
+    DiscogsTrack,
+    ProcessingStats,
+    ACRCloudResult,
+    ConfirmAction,
+    CollisionMap,
+    DiscTrack,
+    CollisionResolutionAction,
+    NoACRMatchAction,
+    NoDiscogsMatchAction,
+    TrackNotInReleaseAction,
 )
 
 
@@ -32,22 +43,35 @@ def pay():
 
 def _af(title="Song", track=1, with_proposed=True):
     current = TrackMetadata(title=title, artist="A", album="B", track_number=track)
-    proposed = TrackMetadata(title=f"New {title}", artist="A", album="B", track_number=track) if with_proposed else None
-    return AudioFile(file_path=f"/fake/{title}.mp3", format="mp3",
-                     current_tags=current, proposed_tags=proposed)
+    proposed = (
+        TrackMetadata(title=f"New {title}", artist="A", album="B", track_number=track)
+        if with_proposed
+        else None
+    )
+    return AudioFile(
+        file_path=f"/fake/{title}.mp3",
+        format="mp3",
+        current_tags=current,
+        proposed_tags=proposed,
+    )
 
 
 # ---------------------------------------------------------------------------
 # show_file_comparison — disc/track branches
 # ---------------------------------------------------------------------------
 
+
 class TestShowFileComparisonBranches:
     def test_shows_disc_info(self, p, capsys):
         af = AudioFile(
             file_path="/path/disc.mp3",
             format="mp3",
-            current_tags=TrackMetadata(disc_number=1, total_discs=2, track_number=3, total_tracks=10),
-            proposed_tags=TrackMetadata(disc_number=2, total_discs=2, track_number=3, total_tracks=10),
+            current_tags=TrackMetadata(
+                disc_number=1, total_discs=2, track_number=3, total_tracks=10
+            ),
+            proposed_tags=TrackMetadata(
+                disc_number=2, total_discs=2, track_number=3, total_tracks=10
+            ),
         )
         p.show_file_comparison(af)
         out = capsys.readouterr().out
@@ -81,6 +105,7 @@ class TestShowFileComparisonBranches:
 # show_discogs_candidates — interactive loop
 # ---------------------------------------------------------------------------
 
+
 class TestShowDiscogsCandidates:
     def _releases(self, n=2):
         return [
@@ -89,7 +114,11 @@ class TestShowDiscogsCandidates:
                 title=f"Release {i}",
                 artists=["Artist"],
                 year=2020,
-                tracklist=[DiscogsTrack(position="A1", title="T", track_number=1, disc_number=1)],
+                tracklist=[
+                    DiscogsTrack(
+                        position="A1", title="T", track_number=1, disc_number=1
+                    )
+                ],
                 total_discs=1,
                 genres=["Rock"],
             )
@@ -112,8 +141,7 @@ class TestShowDiscogsCandidates:
         assert result == "manual_url"
 
     def test_exits_on_q(self, p):
-        with patch("builtins.input", return_value="q"), \
-             pytest.raises(SystemExit):
+        with patch("builtins.input", return_value="q"), pytest.raises(SystemExit):
             p.show_discogs_candidates(self._releases())
 
     def test_re_prompts_on_invalid(self, p):
@@ -122,10 +150,17 @@ class TestShowDiscogsCandidates:
         assert result == 0
 
     def test_release_without_genres(self, p, capsys):
-        releases = [DiscogsRelease(
-            release_id=1, title="T", artists=["A"], year=2020,
-            tracklist=[], total_discs=1, genres=[],
-        )]
+        releases = [
+            DiscogsRelease(
+                release_id=1,
+                title="T",
+                artists=["A"],
+                year=2020,
+                tracklist=[],
+                total_discs=1,
+                genres=[],
+            )
+        ]
         with patch("builtins.input", return_value="1"):
             p.show_discogs_candidates(releases)
         # Should not crash; genres line simply not printed
@@ -134,6 +169,7 @@ class TestShowDiscogsCandidates:
 # ---------------------------------------------------------------------------
 # confirm_tag_changes — REVIEW / EDIT / ALBUM_EDIT / quit
 # ---------------------------------------------------------------------------
+
 
 class TestConfirmTagChanges:
     def test_returns_skip_on_n(self, p):
@@ -151,8 +187,12 @@ class TestConfirmTagChanges:
     def test_review_shows_comparisons_then_loops(self, p):
         files = [_af()]
         choices = iter([ConfirmAction.REVIEW, ConfirmAction.APPLY])
-        with patch.object(p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)), \
-             patch.object(p, "show_file_comparison") as mock_show:
+        with (
+            patch.object(
+                p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)
+            ),
+            patch.object(p, "show_file_comparison") as mock_show,
+        ):
             result = p.confirm_tag_changes(files)
         mock_show.assert_called()
         assert result == ConfirmAction.APPLY
@@ -160,19 +200,27 @@ class TestConfirmTagChanges:
     def test_edit_calls_handle_edit_track(self, p):
         files = [_af()]
         choices = iter([ConfirmAction.EDIT, ConfirmAction.APPLY])
-        with patch.object(p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)), \
-             patch.object(p, "_handle_edit_track") as mock_edit, \
-             patch.object(p, "show_file_comparison"):
-            result = p.confirm_tag_changes(files)
+        with (
+            patch.object(
+                p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)
+            ),
+            patch.object(p, "_handle_edit_track") as mock_edit,
+            patch.object(p, "show_file_comparison"),
+        ):
+            p.confirm_tag_changes(files)
         mock_edit.assert_called_once()
 
     def test_album_edit_calls_handle_edit_album(self, p):
         files = [_af()]
         choices = iter([ConfirmAction.ALBUM_EDIT, ConfirmAction.APPLY])
-        with patch.object(p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)), \
-             patch.object(p, "_handle_edit_album") as mock_alb, \
-             patch.object(p, "show_file_comparison"):
-            result = p.confirm_tag_changes(files)
+        with (
+            patch.object(
+                p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)
+            ),
+            patch.object(p, "_handle_edit_album") as mock_alb,
+            patch.object(p, "show_file_comparison"),
+        ):
+            p.confirm_tag_changes(files)
         mock_alb.assert_called_once()
 
     def test_returns_quit(self, p):
@@ -185,6 +233,7 @@ class TestConfirmTagChanges:
 # ---------------------------------------------------------------------------
 # _handle_edit_track
 # ---------------------------------------------------------------------------
+
 
 class TestHandleEditTrack:
     def test_cancel_returns_immediately(self, p):
@@ -199,8 +248,10 @@ class TestHandleEditTrack:
 
     def test_selects_and_edits_track(self, p):
         files = [_af("SongA"), _af("SongB")]
-        with patch("builtins.input", return_value="1"), \
-             patch.object(p, "_edit_track_fields") as mock_edit:
+        with (
+            patch("builtins.input", return_value="1"),
+            patch.object(p, "_edit_track_fields") as mock_edit,
+        ):
             p._handle_edit_track(files)
         mock_edit.assert_called_once_with(files[0])
 
@@ -215,6 +266,7 @@ class TestHandleEditTrack:
 # edit_collision_files
 # ---------------------------------------------------------------------------
 
+
 class TestEditCollisionFiles:
     def _files(self):
         return [_af("ColA"), _af("ColB")]
@@ -228,16 +280,20 @@ class TestEditCollisionFiles:
     def test_edits_selected_file(self, p):
         files = self._files()
         collision: CollisionMap = {DiscTrack(1, 1): files}
-        with patch("builtins.input", return_value="1"), \
-             patch.object(p, "_edit_track_fields") as mock_edit:
+        with (
+            patch("builtins.input", return_value="1"),
+            patch.object(p, "_edit_track_fields") as mock_edit,
+        ):
             p.edit_collision_files(collision)
         mock_edit.assert_called_once()
 
     def test_seeds_proposed_tags_if_none(self, p):
         af = _af(with_proposed=False)
         collision: CollisionMap = {DiscTrack(1, 1): [af]}
-        with patch("builtins.input", return_value="1"), \
-             patch.object(p, "_edit_track_fields"):
+        with (
+            patch("builtins.input", return_value="1"),
+            patch.object(p, "_edit_track_fields"),
+        ):
             p.edit_collision_files(collision)
         assert af.proposed_tags is not None
 
@@ -251,6 +307,7 @@ class TestEditCollisionFiles:
 # ---------------------------------------------------------------------------
 # _handle_edit_album
 # ---------------------------------------------------------------------------
+
 
 class TestHandleEditAlbum:
     def test_done_on_x(self, p):
@@ -308,6 +365,7 @@ class TestHandleEditAlbum:
 # _edit_track_fields
 # ---------------------------------------------------------------------------
 
+
 class TestEditTrackFields:
     def test_done_on_x(self, p):
         af = _af()
@@ -363,26 +421,28 @@ class TestEditTrackFields:
 # handle_no_acr_match
 # ---------------------------------------------------------------------------
 
+
 class TestHandleNoAcrMatch:
     def test_returns_manual(self, p):
-        with patch.object(p, "_prompt_choice", return_value="manual"):
+        with patch.object(p, "_prompt_choice", return_value=NoACRMatchAction.MANUAL):
             result = p.handle_no_acr_match("/path/file.mp3")
-        assert result == "manual"
+        assert result == NoACRMatchAction.MANUAL
 
     def test_returns_skip(self, p):
         with patch("builtins.input", return_value="3"):
             result = p.handle_no_acr_match("/path/file.mp3")
-        assert result == "skip"
+        assert result == NoACRMatchAction.SKIP
 
     def test_returns_quit(self, p):
         with patch("builtins.input", return_value="q"):
             result = p.handle_no_acr_match("/path/file.mp3")
-        assert result == "quit"
+        assert result == NoACRMatchAction.QUIT
 
 
 # ---------------------------------------------------------------------------
 # handle_no_discogs_match
 # ---------------------------------------------------------------------------
+
 
 class TestHandleNoDiscogsMatch:
     def _acr(self):
@@ -391,32 +451,33 @@ class TestHandleNoDiscogsMatch:
     def test_returns_acr_only(self, p):
         with patch("builtins.input", return_value="1"):
             result = p.handle_no_discogs_match(self._acr())
-        assert result == "acr_only"
+        assert result == NoDiscogsMatchAction.ACR_ONLY
 
     def test_returns_retry(self, p):
         with patch("builtins.input", return_value="2"):
             result = p.handle_no_discogs_match(self._acr())
-        assert result == "retry"
+        assert result == NoDiscogsMatchAction.RETRY
 
     def test_returns_manual_url(self, p):
         with patch("builtins.input", return_value="3"):
             result = p.handle_no_discogs_match(self._acr())
-        assert result == "manual_url"
+        assert result == NoDiscogsMatchAction.MANUAL_URL
 
     def test_returns_manual(self, p):
         with patch("builtins.input", return_value="4"):
             result = p.handle_no_discogs_match(self._acr())
-        assert result == "manual"
+        assert result == NoDiscogsMatchAction.MANUAL
 
     def test_returns_skip(self, p):
         with patch("builtins.input", return_value="5"):
             result = p.handle_no_discogs_match(self._acr())
-        assert result == "skip"
+        assert result == NoDiscogsMatchAction.SKIP
 
 
 # ---------------------------------------------------------------------------
 # get_manual_metadata
 # ---------------------------------------------------------------------------
+
 
 class TestGetManualMetadata:
     def test_cancel_when_no_title_or_artist(self, p, capsys):
@@ -426,18 +487,26 @@ class TestGetManualMetadata:
 
     def test_fills_all_fields(self, p):
         inputs = iter(["Title", "Artist", "Album", "2020", "3", "10", "1", "2", "Rock"])
-        with patch("builtins.input", side_effect=lambda _: next(inputs)), \
-             patch.object(p, "prompt_missing_fields", side_effect=lambda m, _: m):
+        with (
+            patch("builtins.input", side_effect=lambda _: next(inputs)),
+            patch.object(p, "prompt_missing_fields", side_effect=lambda m, _: m),
+        ):
             result = p.get_manual_metadata()
         assert result is not None
         assert result.title == "Title"
 
     def test_uses_defaults(self, p):
-        defaults = TrackMetadata(title="Default Title", artist="Default Artist",
-                                 album="Album", track_number=1)
+        defaults = TrackMetadata(
+            title="Default Title",
+            artist="Default Artist",
+            album="Album",
+            track_number=1,
+        )
         # All Enter — should keep defaults
-        with patch("builtins.input", return_value=""), \
-             patch.object(p, "prompt_missing_fields", side_effect=lambda m, _: m):
+        with (
+            patch("builtins.input", return_value=""),
+            patch.object(p, "prompt_missing_fields", side_effect=lambda m, _: m),
+        ):
             result = p.get_manual_metadata(defaults)
         assert result.title == "Default Title"
 
@@ -445,6 +514,7 @@ class TestGetManualMetadata:
 # ---------------------------------------------------------------------------
 # prompt_missing_fields — fill / skip loop
 # ---------------------------------------------------------------------------
+
 
 class TestPromptMissingFieldsLoop:
     def test_returns_none_on_skip(self, p):
@@ -491,6 +561,7 @@ class TestPromptMissingFieldsLoop:
 # confirm_collision_resolution
 # ---------------------------------------------------------------------------
 
+
 class TestConfirmCollisionResolution:
     def _collision(self):
         af = _af()
@@ -498,58 +569,72 @@ class TestConfirmCollisionResolution:
 
     def test_auto_yes_returns_skip(self, pay):
         result = pay.confirm_collision_resolution(self._collision())
-        assert result == "skip"
+        assert result == CollisionResolutionAction.SKIP
 
     def test_returns_edit(self, p):
         with patch("builtins.input", return_value="e"):
             result = p.confirm_collision_resolution(self._collision())
-        assert result == "edit"
+        assert result == CollisionResolutionAction.EDIT
 
     def test_returns_apply(self, p):
         with patch("builtins.input", return_value="a"):
             result = p.confirm_collision_resolution(self._collision())
-        assert result == "apply"
+        assert result == CollisionResolutionAction.APPLY
 
     def test_default_is_skip(self, p):
         with patch("builtins.input", return_value=""):
             result = p.confirm_collision_resolution(self._collision())
-        assert result == "skip"
+        assert result == CollisionResolutionAction.SKIP
 
 
 # ---------------------------------------------------------------------------
 # confirm_force_override
 # ---------------------------------------------------------------------------
 
+
 class TestConfirmForceOverride:
     def test_auto_yes_returns_false(self, pay):
         af = _af()
-        result = pay.confirm_force_override(af, "song.mp3", af.current_tags, af.proposed_tags)
+        result = pay.confirm_force_override(
+            af, "song.mp3", af.current_tags, af.proposed_tags
+        )
         assert result is False
 
     def test_accept_returns_true(self, p):
         af = _af()
         with patch.object(p, "_prompt_choice", return_value="accept"):
-            result = p.confirm_force_override(af, "song.mp3", af.current_tags, af.proposed_tags)
+            result = p.confirm_force_override(
+                af, "song.mp3", af.current_tags, af.proposed_tags
+            )
         assert result is True
 
     def test_decline_returns_false(self, p):
         af = _af()
         with patch.object(p, "_prompt_choice", return_value="decline"):
-            result = p.confirm_force_override(af, "song.mp3", af.current_tags, af.proposed_tags)
+            result = p.confirm_force_override(
+                af, "song.mp3", af.current_tags, af.proposed_tags
+            )
         assert result is False
 
     def test_edit_calls_edit_track_fields(self, p):
         af = _af()
         choices = iter(["edit", "decline"])
-        with patch.object(p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)), \
-             patch.object(p, "_edit_track_fields"):
-            result = p.confirm_force_override(af, "song.mp3", af.current_tags, af.proposed_tags)
+        with (
+            patch.object(
+                p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)
+            ),
+            patch.object(p, "_edit_track_fields"),
+        ):
+            result = p.confirm_force_override(
+                af, "song.mp3", af.current_tags, af.proposed_tags
+            )
         assert result is False
 
 
 # ---------------------------------------------------------------------------
 # show_folder_status
 # ---------------------------------------------------------------------------
+
 
 class TestShowFolderStatus:
     def test_shows_folder_info(self, p, capsys):
@@ -569,26 +654,28 @@ class TestShowFolderStatus:
 # handle_track_not_in_release
 # ---------------------------------------------------------------------------
 
+
 class TestHandleTrackNotInRelease:
     def test_returns_search(self, p):
         with patch("builtins.input", return_value="1"):
             result = p.handle_track_not_in_release("song.mp3", "Album")
-        assert result == "search"
+        assert result == TrackNotInReleaseAction.SEARCH
 
     def test_returns_skip(self, p):
         with patch("builtins.input", return_value="2"):
             result = p.handle_track_not_in_release("song.mp3", "Album")
-        assert result == "skip"
+        assert result == TrackNotInReleaseAction.SKIP
 
     def test_returns_quit(self, p):
         with patch("builtins.input", return_value="q"):
             result = p.handle_track_not_in_release("song.mp3", "Album")
-        assert result == "quit"
+        assert result == TrackNotInReleaseAction.QUIT
 
 
 # ---------------------------------------------------------------------------
 # show_summary — overflow branches
 # ---------------------------------------------------------------------------
+
 
 class TestShowSummaryOverflow:
     def test_shows_overflow_malformed(self, p, capsys):
@@ -609,6 +696,7 @@ class TestShowSummaryOverflow:
 # ---------------------------------------------------------------------------
 # show_file_rename
 # ---------------------------------------------------------------------------
+
 
 class TestShowFileRename:
     def test_shows_rename(self, p, capsys):

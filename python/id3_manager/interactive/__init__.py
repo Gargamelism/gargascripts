@@ -11,6 +11,10 @@ from models import (
     ACRCloudResult,
     ConfirmAction,
     CollisionMap,
+    CollisionResolutionAction,
+    NoACRMatchAction,
+    NoDiscogsMatchAction,
+    TrackNotInReleaseAction,
 )
 from . import display as _display
 from . import editing as _editing
@@ -109,7 +113,9 @@ class InteractivePrompts:
             default=False,
         )
 
-    def confirm_collision_resolution(self, collisions: CollisionMap) -> str:
+    def confirm_collision_resolution(
+        self, collisions: CollisionMap
+    ) -> CollisionResolutionAction:
         print(f"\n{self._c('red', 'Track-number collisions detected:')}")
         for key, files in sorted(collisions.items()):
             print(self._c("yellow", f"  Disc {key.disc}, track {key.track}:"))
@@ -122,20 +128,20 @@ class InteractivePrompts:
                     "red", "[AUTO] Collision detected - skipping conflicting files."
                 )
             )
-            return "skip"
+            return CollisionResolutionAction.SKIP
         return self._prompt_choice(
             "Resolve collisions? [s]kip conflicting / [e]dit fields / [a]pply anyway / [q]uit:",
             {
-                "s": "skip",
-                "skip": "skip",
-                "e": "edit",
-                "edit": "edit",
-                "a": "apply",
-                "apply": "apply",
-                "q": "quit",
-                "quit": "quit",
+                "s": CollisionResolutionAction.SKIP,
+                "skip": CollisionResolutionAction.SKIP,
+                "e": CollisionResolutionAction.EDIT,
+                "edit": CollisionResolutionAction.EDIT,
+                "a": CollisionResolutionAction.APPLY,
+                "apply": CollisionResolutionAction.APPLY,
+                "q": CollisionResolutionAction.QUIT,
+                "quit": CollisionResolutionAction.QUIT,
             },
-            default="skip",
+            default=CollisionResolutionAction.SKIP,
         )
 
     def confirm_force_override(
@@ -230,10 +236,12 @@ class InteractivePrompts:
     def get_discogs_url_or_id(self) -> Optional[int]:
         return _search.get_discogs_url_or_id(self)
 
-    def handle_no_acr_match(self, file_path: str) -> str:
+    def handle_no_acr_match(self, file_path: str) -> NoACRMatchAction:
         return _search.handle_no_acr_match(self, file_path)
 
-    def handle_no_discogs_match(self, acr_result: ACRCloudResult) -> str:
+    def handle_no_discogs_match(
+        self, acr_result: ACRCloudResult
+    ) -> NoDiscogsMatchAction:
         return _search.handle_no_discogs_match(self, acr_result)
 
     def get_manual_metadata(
@@ -251,7 +259,9 @@ class InteractivePrompts:
     ) -> tuple:
         return _search.get_modified_search_query(self, default_artist, default_track)
 
-    def handle_track_not_in_release(self, filename: str, release_title: str) -> str:
+    def handle_track_not_in_release(
+        self, filename: str, release_title: str
+    ) -> TrackNotInReleaseAction:
         return _search.handle_track_not_in_release(self, filename, release_title)
 
     # --- Editing shims ---

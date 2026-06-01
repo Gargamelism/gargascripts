@@ -3,14 +3,16 @@
 import sys
 from pathlib import Path
 
-from models import AudioFile, TrackMetadata
+from models import AudioFile, TrackMetadata, NoDiscogsMatchAction
 
 
 def match_track_from_cached_release(proc, af: AudioFile, release, acr_result) -> bool:
     track = proc.discogs_client.match_track_to_release(release, acr_result.title)
 
     if (not track or not track.track_number) and af.current_tags.title:
-        track = proc.discogs_client.match_track_to_release(release, af.current_tags.title)
+        track = proc.discogs_client.match_track_to_release(
+            release, af.current_tags.title
+        )
 
     if track and track.track_number:
         af.discogs_release = release
@@ -51,63 +53,68 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
         return None
 
     releases = proc.discogs_client.find_best_release(
-        artist=artist,
-        album=acr_result.album,
-        track=acr_result.title
+        artist=artist, album=acr_result.album, track=acr_result.title
     )
     proc.stats.discogs_lookups += 1
 
     if not releases:
         action = proc.prompts.handle_no_discogs_match(acr_result)
 
-        if action == "acr_only":
-            proposed = TrackMetadata(
-                title=acr_result.title,
-                artist=artist,
-                album=acr_result.album,
-            )
-            proposed = proposed.merge_with(af.current_tags)
-            proposed = proc.prompts.prompt_missing_fields(proposed, Path(af.file_path).name)
-            if proposed is None:
-                proc.stats.files_skipped += 1
-                return None
-            af.proposed_tags = proposed
-            return None
-        elif action == "retry":
-            new_artist, new_track = proc.prompts.get_modified_search_query(
-                artist, acr_result.title
-            )
-            releases = proc.discogs_client.find_best_release(
-                artist=new_artist, track=new_track
-            )
-            proc.stats.discogs_lookups += 1
-        elif action == "manual_url":
-            release_id = proc.prompts.get_discogs_url_or_id()
-            if release_id:
-                release = proc.discogs_client.get_release(release_id)
-                proc.stats.discogs_lookups += 1
-                if release:
-                    releases = [release]
-                    discogs_url = f"https://www.discogs.com/release/{release.release_id}"
-                    proc.prompts.print(f"  Fetched: {release.title} ({release.year})")
-                    proc.prompts.print(f"  {discogs_url}")
-                else:
-                    proc.prompts.print("  Could not fetch release.")
+        match action:
+            case NoDiscogsMatchAction.ACR_ONLY:
+                proposed = TrackMetadata(
+                    title=acr_result.title,
+                    artist=artist,
+                    album=acr_result.album,
+                )
+                proposed = proposed.merge_with(af.current_tags)
+                proposed = proc.prompts.prompt_missing_fields(
+                    proposed, Path(af.file_path).name
+                )
+                if proposed is None:
                     proc.stats.files_skipped += 1
                     return None
-            else:
+                af.proposed_tags = proposed
+                return None
+            case NoDiscogsMatchAction.RETRY:
+                new_artist, new_track = proc.prompts.get_modified_search_query(
+                    artist, acr_result.title
+                )
+                releases = proc.discogs_client.find_best_release(
+                    artist=new_artist, track=new_track
+                )
+                proc.stats.discogs_lookups += 1
+            case NoDiscogsMatchAction.MANUAL_URL:
+                release_id = proc.prompts.get_discogs_url_or_id()
+                if release_id:
+                    release = proc.discogs_client.get_release(release_id)
+                    proc.stats.discogs_lookups += 1
+                    if release:
+                        releases = [release]
+                        discogs_url = (
+                            f"https://www.discogs.com/release/{release.release_id}"
+                        )
+                        proc.prompts.print(
+                            f"  Fetched: {release.title} ({release.year})"
+                        )
+                        proc.prompts.print(f"  {discogs_url}")
+                    else:
+                        proc.prompts.print("  Could not fetch release.")
+                        proc.stats.files_skipped += 1
+                        return None
+                else:
+                    proc.stats.files_skipped += 1
+                    return None
+            case NoDiscogsMatchAction.MANUAL:
+                manual_tags = proc.prompts.get_manual_metadata()
+                if manual_tags:
+                    af.proposed_tags = manual_tags
+                return None
+            case NoDiscogsMatchAction.SKIP:
                 proc.stats.files_skipped += 1
                 return None
-        elif action == "manual":
-            manual_tags = proc.prompts.get_manual_metadata()
-            if manual_tags:
-                af.proposed_tags = manual_tags
-            return None
-        elif action == "skip":
-            proc.stats.files_skipped += 1
-            return None
-        elif action == "quit":
-            sys.exit(0)
+            case NoDiscogsMatchAction.QUIT:
+                sys.exit(0)
 
     if not releases:
         return None
@@ -121,60 +128,67 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
     while not matchable_releases:
         action = proc.prompts.handle_no_discogs_match(acr_result)
 
-        if action == "acr_only":
-            proposed = TrackMetadata(
-                title=acr_result.title,
-                artist=artist,
-                album=acr_result.album,
-            )
-            proposed = proposed.merge_with(af.current_tags)
-            proposed = proc.prompts.prompt_missing_fields(proposed, Path(af.file_path).name)
-            if proposed is None:
+        match action:
+            case NoDiscogsMatchAction.ACR_ONLY:
+                proposed = TrackMetadata(
+                    title=acr_result.title,
+                    artist=artist,
+                    album=acr_result.album,
+                )
+                proposed = proposed.merge_with(af.current_tags)
+                proposed = proc.prompts.prompt_missing_fields(
+                    proposed, Path(af.file_path).name
+                )
+                if proposed is None:
+                    proc.stats.files_skipped += 1
+                    return None
+                af.proposed_tags = proposed
+                return None
+            case NoDiscogsMatchAction.MANUAL_URL:
+                release_id = proc.prompts.get_discogs_url_or_id()
+                if release_id:
+                    release = proc.discogs_client.get_release(release_id)
+                    proc.stats.discogs_lookups += 1
+                    if release:
+                        track = proc.discogs_client.match_track_to_release(
+                            release, acr_result.title
+                        )
+                        matchable_releases = [(release, track)]
+                    else:
+                        proc.prompts.print("  Could not fetch release.")
+                else:
+                    continue
+            case NoDiscogsMatchAction.RETRY:
+                new_artist, new_track = proc.prompts.get_modified_search_query(
+                    artist, acr_result.title
+                )
+                releases = proc.discogs_client.find_best_release(
+                    artist=new_artist, track=new_track
+                )
+                proc.stats.discogs_lookups += 1
+                matchable_releases = []
+                for release in releases:
+                    track = proc.discogs_client.match_track_to_release(
+                        release, acr_result.title
+                    )
+                    if track and track.track_number:
+                        matchable_releases.append((release, track))
+                if not matchable_releases:
+                    proc.prompts.print("  No matching releases found.")
+            case NoDiscogsMatchAction.MANUAL:
+                manual_tags = proc.prompts.get_manual_metadata(af.current_tags)
+                if manual_tags:
+                    af.proposed_tags = manual_tags
+                else:
+                    proc.stats.files_skipped += 1
+                return None
+            case NoDiscogsMatchAction.SKIP:
                 proc.stats.files_skipped += 1
                 return None
-            af.proposed_tags = proposed
-            return None
-        elif action == "manual_url":
-            release_id = proc.prompts.get_discogs_url_or_id()
-            if release_id:
-                release = proc.discogs_client.get_release(release_id)
-                proc.stats.discogs_lookups += 1
-                if release:
-                    track = proc.discogs_client.match_track_to_release(release, acr_result.title)
-                    matchable_releases = [(release, track)]
-                else:
-                    proc.prompts.print("  Could not fetch release.")
-            else:
-                continue
-        elif action == "retry":
-            new_artist, new_track = proc.prompts.get_modified_search_query(
-                artist, acr_result.title
-            )
-            releases = proc.discogs_client.find_best_release(
-                artist=new_artist, track=new_track
-            )
-            proc.stats.discogs_lookups += 1
-            matchable_releases = []
-            for release in releases:
-                track = proc.discogs_client.match_track_to_release(release, acr_result.title)
-                if track and track.track_number:
-                    matchable_releases.append((release, track))
-            if not matchable_releases:
-                proc.prompts.print("  No matching releases found.")
-        elif action == "manual":
-            manual_tags = proc.prompts.get_manual_metadata(af.current_tags)
-            if manual_tags:
-                af.proposed_tags = manual_tags
-            else:
-                proc.stats.files_skipped += 1
-            return None
-        elif action == "skip":
-            proc.stats.files_skipped += 1
-            return None
-        elif action == "quit":
-            sys.exit(0)
-        else:
-            return None
+            case NoDiscogsMatchAction.QUIT:
+                sys.exit(0)
+            case _:
+                return None
 
     display_releases = [r for r, _ in matchable_releases]
     selected = proc.prompts.show_discogs_candidates(display_releases)
@@ -192,7 +206,9 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                 discogs_url = f"https://www.discogs.com/release/{release.release_id}"
                 proc.prompts.print(f"  Fetched: {release.title} ({release.year})")
                 proc.prompts.print(f"  {discogs_url}")
-                track = proc.discogs_client.match_track_to_release(release, acr_result.title)
+                track = proc.discogs_client.match_track_to_release(
+                    release, acr_result.title
+                )
             else:
                 proc.prompts.print("  Could not fetch release.")
                 proc.stats.files_skipped += 1

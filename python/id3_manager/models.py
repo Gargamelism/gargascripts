@@ -9,6 +9,7 @@ from utils import file_needs_rename
 
 class TagStatus(Enum):
     """Status of ID3 tags for an audio file."""
+
     COMPLETE = "complete"
     PARTIAL = "partial"
     MISSING = "missing"
@@ -16,6 +17,7 @@ class TagStatus(Enum):
 
 class ConfirmAction(Enum):
     """User's response at the confirm-tag-changes prompt."""
+
     APPLY = "apply"
     SKIP = "skip"
     QUIT = "quit"
@@ -24,8 +26,38 @@ class ConfirmAction(Enum):
     ALBUM_EDIT = "album_edit"
 
 
+class CollisionResolutionAction(Enum):
+    SKIP = "skip"
+    EDIT = "edit"
+    APPLY = "apply"
+    QUIT = "quit"
+
+
+class NoACRMatchAction(Enum):
+    MANUAL = "manual"
+    EXISTING = "existing"
+    SKIP = "skip"
+    QUIT = "quit"
+
+
+class NoDiscogsMatchAction(Enum):
+    ACR_ONLY = "acr_only"
+    RETRY = "retry"
+    MANUAL_URL = "manual_url"
+    MANUAL = "manual"
+    SKIP = "skip"
+    QUIT = "quit"
+
+
+class TrackNotInReleaseAction(Enum):
+    SEARCH = "search"
+    SKIP = "skip"
+    QUIT = "quit"
+
+
 class DiscTrack(NamedTuple):
     """A (disc, track) position; the key used to detect rename collisions."""
+
     disc: int
     track: int
 
@@ -33,6 +65,7 @@ class DiscTrack(NamedTuple):
 @dataclass
 class TrackMetadata:
     """Represents metadata for a single track."""
+
     title: Optional[str] = None
     artist: Optional[str] = None
     album: Optional[str] = None
@@ -63,13 +96,13 @@ class TrackMetadata:
         """Return list of missing required field names."""
         missing = []
         if not self.title:
-            missing.append('title')
+            missing.append("title")
         if not self.artist:
-            missing.append('artist')
+            missing.append("artist")
         if not self.track_number:
-            missing.append('track_number')
+            missing.append("track_number")
         if not self.album:
-            missing.append('album')
+            missing.append("album")
         return missing
 
     def merge_with(self, other: "TrackMetadata") -> "TrackMetadata":
@@ -91,6 +124,7 @@ class TrackMetadata:
 @dataclass
 class ACRCloudResult:
     """Result from ACRCloud fingerprint recognition."""
+
     title: str
     artists: List[str]
     album: Optional[str] = None
@@ -102,6 +136,7 @@ class ACRCloudResult:
 @dataclass
 class DiscogsTrack:
     """A single track from a Discogs release."""
+
     position: str
     title: str
     duration: Optional[str] = None
@@ -112,6 +147,7 @@ class DiscogsTrack:
 @dataclass
 class DiscogsRelease:
     """Discogs release information."""
+
     release_id: int
     title: str
     artists: List[str]
@@ -133,6 +169,7 @@ class DiscogsRelease:
 @dataclass
 class AudioFile:
     """Represents an audio file with its current and proposed metadata."""
+
     file_path: str
     format: str  # 'mp3', 'flac', 'm4a'
     current_tags: TrackMetadata = field(default_factory=TrackMetadata)
@@ -167,7 +204,9 @@ class AudioFile:
     @property
     def has_actual_changes(self) -> bool:
         """Check if proposed tags actually differ from current tags."""
-        return self.proposed_tags is not None and self.proposed_tags != self.current_tags
+        return (
+            self.proposed_tags is not None and self.proposed_tags != self.current_tags
+        )
 
     @property
     def inferred_disc_number(self) -> Optional[int]:
@@ -181,6 +220,7 @@ CollisionMap = Dict[DiscTrack, List[AudioFile]]
 @dataclass
 class AlbumFolder:
     """Represents a folder containing audio files (potentially one disc of an album)."""
+
     folder_path: str
     audio_files: List[AudioFile] = field(default_factory=list)
     detected_disc_number: Optional[int] = None
@@ -197,6 +237,7 @@ class AlbumFolder:
 @dataclass
 class ProcessingStats:
     """Statistics for a processing run."""
+
     total_files: int = 0
     files_processed: int = 0
     tags_updated: int = 0

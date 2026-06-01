@@ -10,7 +10,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import ID3Processor, build_parser
-from models import AudioFile, TrackMetadata, DiscogsRelease, DiscogsTrack
+from models import (
+    AudioFile,
+    TrackMetadata,
+    DiscogsRelease,
+    DiscogsTrack,
+    NoACRMatchAction,
+    NoDiscogsMatchAction,
+    TrackNotInReleaseAction,
+)
 from sync_results import CommitResult
 
 
@@ -64,9 +72,11 @@ def mock_prompts():
     prompts.confirm_tag_changes = Mock(return_value="apply")
     prompts.confirm_folder_rename = Mock(return_value=True)
     prompts.confirm_file_renames = Mock(return_value=True)
-    prompts.handle_no_acr_match = Mock(return_value="skip")
-    prompts.handle_no_discogs_match = Mock(return_value="skip")
-    prompts.handle_track_not_in_release = Mock(return_value="skip")
+    prompts.handle_no_acr_match = Mock(return_value=NoACRMatchAction.SKIP)
+    prompts.handle_no_discogs_match = Mock(return_value=NoDiscogsMatchAction.SKIP)
+    prompts.handle_track_not_in_release = Mock(
+        return_value=TrackNotInReleaseAction.SKIP
+    )
     prompts.prompt_missing_fields = Mock(side_effect=lambda m, f: m)
     prompts.get_manual_metadata = Mock(return_value=None)
     prompts.get_discogs_url_or_id = Mock(return_value=None)
@@ -202,7 +212,9 @@ class TestID3ProcessorInitialization:
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         assert processor.folder_manager is not None
 
-    def test_creates_acr_client_when_configured(self, mock_config, mock_args, mock_prompts):
+    def test_creates_acr_client_when_configured(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should create ACRCloudClient when credentials present."""
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         assert processor.acr_client is not None
@@ -219,12 +231,16 @@ class TestID3ProcessorInitialization:
         processor = ID3Processor(config, mock_args, mock_prompts)
         assert processor.acr_client is None
 
-    def test_creates_discogs_client_when_configured(self, mock_config, mock_args, mock_prompts):
+    def test_creates_discogs_client_when_configured(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should create DiscogsClient when token present."""
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         assert processor.discogs_client is not None
 
-    def test_no_discogs_client_when_skip_discogs(self, mock_config, mock_args, mock_prompts):
+    def test_no_discogs_client_when_skip_discogs(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should not create DiscogsClient when --skip-discogs."""
         mock_args.skip_discogs = True
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
@@ -251,7 +267,9 @@ class TestMatchTrackFromCachedRelease:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Test Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
@@ -309,7 +327,9 @@ class TestMatchTrackFromCachedRelease:
 class TestProcessSingleFileObj:
     """Tests for _process_single_file_obj method."""
 
-    def test_skips_complete_files_without_force(self, mock_config, mock_args, mock_prompts):
+    def test_skips_complete_files_without_force(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should skip files with complete tags when not forcing."""
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
 
@@ -330,7 +350,9 @@ class TestProcessSingleFileObj:
         assert result is None
         assert af.proposed_tags is None
 
-    def test_processes_complete_files_with_force(self, mock_config, mock_args, mock_prompts):
+    def test_processes_complete_files_with_force(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should process files with complete tags when forcing."""
         mock_args.force = True
 
@@ -450,7 +472,9 @@ class TestHandleFileRenames:
         # should_rename_file should not be called because no_file_rename is True
         processor.folder_manager.should_rename_file.assert_not_called()
 
-    def test_skips_files_that_dont_need_rename(self, mock_config, mock_args, mock_prompts):
+    def test_skips_files_that_dont_need_rename(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should skip files that already have correct names."""
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         processor.id3_handler = Mock()
@@ -481,7 +505,9 @@ class TestHandleFileRenames:
 class TestDiscoverAudioFiles:
     """Tests for _discover_audio_files method."""
 
-    def test_sorts_by_track_number(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_sorts_by_track_number(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should sort files by disc number then track number."""
         # Create temp audio files
         (tmp_path / "track3.mp3").touch()
@@ -499,9 +525,9 @@ class TestDiscoverAudioFiles:
 
         processor.id3_handler.read_tags = mock_read_tags
 
-        with patch.object(processor.id3_handler, 'is_supported', return_value=True):
-            with patch('main.ID3Handler.is_supported', return_value=True):
-                with patch('main.ID3Handler.get_format', return_value="mp3"):
+        with patch.object(processor.id3_handler, "is_supported", return_value=True):
+            with patch("main.ID3Handler.is_supported", return_value=True):
+                with patch("main.ID3Handler.get_format", return_value="mp3"):
                     files = processor._discover_audio_files(str(tmp_path))
 
         # Should be sorted by track number
@@ -526,7 +552,9 @@ class TestSearchAndMatchDiscogs:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Different Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
@@ -538,7 +566,9 @@ class TestSearchAndMatchDiscogs:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Test Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
@@ -557,8 +587,12 @@ class TestSearchAndMatchDiscogs:
         )
 
         # Setup prompts to return "retry" when no match found
-        mock_prompts.handle_no_discogs_match = Mock(return_value="retry")
-        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+        mock_prompts.handle_no_discogs_match = Mock(
+            return_value=NoDiscogsMatchAction.RETRY
+        )
+        mock_prompts.get_modified_search_query = Mock(
+            return_value=("Test Artist", "Test Song")
+        )
         mock_prompts.show_discogs_candidates = Mock(return_value=0)
 
         af = AudioFile(
@@ -576,7 +610,9 @@ class TestSearchAndMatchDiscogs:
         result = processor._search_and_match_discogs(af, acr_result)
 
         # Should have called get_modified_search_query
-        mock_prompts.get_modified_search_query.assert_called_once_with("Test Artist", "Test Song")
+        mock_prompts.get_modified_search_query.assert_called_once_with(
+            "Test Artist", "Test Song"
+        )
 
         # Should have searched twice (initial + retry)
         assert processor.discogs_client.find_best_release.call_count == 2
@@ -599,7 +635,9 @@ class TestSearchAndMatchDiscogs:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Different Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
@@ -610,8 +648,12 @@ class TestSearchAndMatchDiscogs:
         processor.discogs_client.match_track_to_release = Mock(return_value=None)
 
         # First call returns "retry", second call returns "skip" to exit the loop
-        mock_prompts.handle_no_discogs_match = Mock(side_effect=["retry", "skip"])
-        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+        mock_prompts.handle_no_discogs_match = Mock(
+            side_effect=[NoDiscogsMatchAction.RETRY, NoDiscogsMatchAction.SKIP]
+        )
+        mock_prompts.get_modified_search_query = Mock(
+            return_value=("Test Artist", "Test Song")
+        )
 
         af = AudioFile(
             file_path="/test/song.mp3",
@@ -654,7 +696,9 @@ class TestSearchAndMatchDiscogs:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Different Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Different Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
@@ -666,14 +710,18 @@ class TestSearchAndMatchDiscogs:
             artists=["Test Artist"],
             year=2020,
             tracklist=[
-                DiscogsTrack(position="1", title="Test Song", track_number=1, disc_number=1),
+                DiscogsTrack(
+                    position="1", title="Test Song", track_number=1, disc_number=1
+                ),
             ],
             total_discs=1,
         )
 
         processor.discogs_client = Mock()
         # Initial search returns release but no matching track
-        processor.discogs_client.find_best_release = Mock(return_value=[release_no_match])
+        processor.discogs_client.find_best_release = Mock(
+            return_value=[release_no_match]
+        )
         # First call returns None (no match), after manual URL entry returns the track
         processor.discogs_client.match_track_to_release = Mock(
             side_effect=[None, None, manual_release.tracklist[0]]
@@ -681,8 +729,12 @@ class TestSearchAndMatchDiscogs:
         processor.discogs_client.get_release = Mock(return_value=manual_release)
 
         # First: retry (fails), Second: manual_url
-        mock_prompts.handle_no_discogs_match = Mock(side_effect=["retry", "manual_url"])
-        mock_prompts.get_modified_search_query = Mock(return_value=("Test Artist", "Test Song"))
+        mock_prompts.handle_no_discogs_match = Mock(
+            side_effect=[NoDiscogsMatchAction.RETRY, NoDiscogsMatchAction.MANUAL_URL]
+        )
+        mock_prompts.get_modified_search_query = Mock(
+            return_value=("Test Artist", "Test Song")
+        )
         mock_prompts.get_discogs_url_or_id = Mock(return_value=789)
         mock_prompts.show_discogs_candidates = Mock(return_value=0)
 
@@ -716,7 +768,9 @@ class TestSearchAndMatchDiscogs:
 class TestFilterFoldersFromStart:
     """Tests for _filter_folders_from_start method."""
 
-    def test_returns_all_folders_when_start_at_is_none(self, mock_config, mock_args, mock_prompts):
+    def test_returns_all_folders_when_start_at_is_none(
+        self, mock_config, mock_args, mock_prompts
+    ):
         """Should return all folders when start_at is None."""
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         folders = ["/path/a", "/path/b", "/path/c"]
@@ -725,7 +779,9 @@ class TestFilterFoldersFromStart:
 
         assert result == folders
 
-    def test_returns_folders_from_start_point(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_returns_folders_from_start_point(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should skip folders before start_at and return the rest."""
         # Create real folders so Path.resolve() works
         folder_a = tmp_path / "2020 - Album A"
@@ -745,7 +801,9 @@ class TestFilterFoldersFromStart:
         assert result[0] == str(folder_b)
         assert result[1] == str(folder_c)
 
-    def test_returns_empty_list_when_start_at_not_found(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_returns_empty_list_when_start_at_not_found(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should return empty list when start_at folder is not in the list."""
         folder_a = tmp_path / "a"
         folder_b = tmp_path / "b"
@@ -763,7 +821,9 @@ class TestFilterFoldersFromStart:
         mock_prompts.print.assert_called_once()
         assert "not found" in mock_prompts.print.call_args[0][0].lower()
 
-    def test_returns_all_when_start_at_is_first_folder(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_returns_all_when_start_at_is_first_folder(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should return all folders when start_at is the first folder."""
         folder_a = tmp_path / "a"
         folder_b = tmp_path / "b"
@@ -782,7 +842,9 @@ class TestFilterFoldersFromStart:
         # Should not print "skipping" message when starting at first folder
         mock_prompts.print.assert_not_called()
 
-    def test_returns_only_last_when_start_at_is_last_folder(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_returns_only_last_when_start_at_is_last_folder(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should return only last folder when start_at is the last one."""
         folder_a = tmp_path / "a"
         folder_b = tmp_path / "b"
@@ -801,7 +863,9 @@ class TestFilterFoldersFromStart:
         mock_prompts.print.assert_called_once()
         assert "2 folder" in mock_prompts.print.call_args[0][0].lower()
 
-    def test_prints_skip_count_when_skipping(self, mock_config, mock_args, mock_prompts, tmp_path):
+    def test_prints_skip_count_when_skipping(
+        self, mock_config, mock_args, mock_prompts, tmp_path
+    ):
         """Should print how many folders are being skipped."""
         folder_a = tmp_path / "a"
         folder_b = tmp_path / "b"
@@ -855,8 +919,12 @@ class TestRenameOnly:
         processor.folder_manager = Mock()
         processor.folder_manager.detect_multi_disc_structure = Mock(return_value=[])
         processor.folder_manager.should_rename_file = Mock(return_value=True)
-        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
+        processor.folder_manager.generate_filename = Mock(
+            return_value="Artist - Album - 01 - Song.mp3"
+        )
+        processor.folder_manager.rename_audio_file = Mock(
+            return_value=CommitResult(success=True, message="/new/path.mp3")
+        )
         processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
@@ -871,8 +939,8 @@ class TestRenameOnly:
             ),
         )
 
-        with patch.object(processor, '_discover_audio_files', return_value=[af]):
-            with patch('models.file_needs_rename', return_value=True):
+        with patch.object(processor, "_discover_audio_files", return_value=[af]):
+            with patch("models.file_needs_rename", return_value=True):
                 processor._process_folder("/test")
 
         # Should NOT have created ACR or Discogs clients
@@ -892,18 +960,27 @@ class TestRenameOnly:
 
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         processor.id3_handler = Mock()
-        processor.id3_handler.read_tags = Mock(return_value=TrackMetadata(
-            title="Song", artist="Artist", album="Album", track_number=1,
-        ))
+        processor.id3_handler.read_tags = Mock(
+            return_value=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+            )
+        )
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=True)
-        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
+        processor.folder_manager.generate_filename = Mock(
+            return_value="Artist - Album - 01 - Song.mp3"
+        )
+        processor.folder_manager.rename_audio_file = Mock(
+            return_value=CommitResult(success=True, message="/new/path.mp3")
+        )
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
-        with patch('main.ID3Handler.is_supported', return_value=True):
-            with patch('main.ID3Handler.get_format', return_value="mp3"):
-                with patch('models.file_needs_rename', return_value=True):
+        with patch("main.ID3Handler.is_supported", return_value=True):
+            with patch("main.ID3Handler.get_format", return_value="mp3"):
+                with patch("models.file_needs_rename", return_value=True):
                     processor._process_single_file("/test/wrong_name.mp3")
 
         # Should have called rename
@@ -924,8 +1001,12 @@ class TestFilesOnlyNeedingRename:
         processor = ID3Processor(mock_config, mock_args, mock_prompts)
         processor.folder_manager = Mock()
         processor.folder_manager.should_rename_file = Mock(return_value=True)
-        processor.folder_manager.generate_filename = Mock(return_value="Artist - Album - 01 - Song.mp3")
-        processor.folder_manager.rename_audio_file = Mock(return_value=CommitResult(success=True, message="/new/path.mp3"))
+        processor.folder_manager.generate_filename = Mock(
+            return_value="Artist - Album - 01 - Song.mp3"
+        )
+        processor.folder_manager.rename_audio_file = Mock(
+            return_value=CommitResult(success=True, message="/new/path.mp3")
+        )
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         # File has complete tags but wrong filename
@@ -944,7 +1025,7 @@ class TestFilesOnlyNeedingRename:
         assert not af.needs_processing  # Tags are complete
 
         # Patch the file_needs_rename function to return True for this file
-        with patch('models.file_needs_rename', return_value=True):
+        with patch("models.file_needs_rename", return_value=True):
             processor._process_files([af])
 
         # Should have called rename

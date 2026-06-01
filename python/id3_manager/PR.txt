@@ -1,6 +1,4 @@
 
-for action loops use match case instead of if elif else
-
 OneDriveSync -> protocol
 
 Create a mermaid flow chart explaining all app flows

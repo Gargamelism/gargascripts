@@ -18,6 +18,10 @@ from models import (
     DiscogsTrack,
     AlbumFolder,
     ConfirmAction,
+    CollisionResolutionAction,
+    NoACRMatchAction,
+    NoDiscogsMatchAction,
+    TrackNotInReleaseAction,
 )
 from sync_results import CommitResult, MoveResult
 
@@ -74,10 +78,10 @@ def prompts():
     p.confirm_tag_changes = Mock(return_value=ConfirmAction.SKIP)
     p.confirm_folder_rename = Mock(return_value=False)
     p.confirm_file_renames = Mock(return_value=False)
-    p.confirm_collision_resolution = Mock(return_value="skip")
-    p.handle_no_acr_match = Mock(return_value="skip")
-    p.handle_no_discogs_match = Mock(return_value="skip")
-    p.handle_track_not_in_release = Mock(return_value="skip")
+    p.confirm_collision_resolution = Mock(return_value=CollisionResolutionAction.SKIP)
+    p.handle_no_acr_match = Mock(return_value=NoACRMatchAction.SKIP)
+    p.handle_no_discogs_match = Mock(return_value=NoDiscogsMatchAction.SKIP)
+    p.handle_track_not_in_release = Mock(return_value=TrackNotInReleaseAction.SKIP)
     p.prompt_missing_fields = Mock(side_effect=lambda m, f: m)
     p.get_manual_metadata = Mock(return_value=None)
     p.get_discogs_url_or_id = Mock(return_value=None)
@@ -249,7 +253,9 @@ class TestProcessFilesCollisionFlow:
         _proposed(a, track=1, title="Song A")
         _proposed(b, track=1, title="Song B")
 
-        prompts.confirm_collision_resolution.return_value = "skip"
+        prompts.confirm_collision_resolution.return_value = (
+            CollisionResolutionAction.SKIP
+        )
         prompts.confirm_tag_changes.return_value = ConfirmAction.SKIP
 
         p._process_files([a, b])
@@ -270,7 +276,9 @@ class TestProcessFilesCollisionFlow:
         _proposed(a, track=1, title="Song A")
         _proposed(b, track=1, title="Song B")
 
-        prompts.confirm_collision_resolution.return_value = "apply"
+        prompts.confirm_collision_resolution.return_value = (
+            CollisionResolutionAction.APPLY
+        )
         prompts.confirm_tag_changes.return_value = ConfirmAction.APPLY
 
         p.id3_handler = Mock()
@@ -297,11 +305,11 @@ class TestProcessFilesCollisionFlow:
         def side_effect(collisions):
             call_count[0] += 1
             if call_count[0] == 1:
-                return "edit"
+                return CollisionResolutionAction.EDIT
             # After edit, fix the collision
             a.proposed_tags = None
             b.proposed_tags = None
-            return "skip"
+            return CollisionResolutionAction.SKIP
 
         prompts.confirm_collision_resolution.side_effect = side_effect
         prompts.confirm_tag_changes.return_value = ConfirmAction.SKIP
@@ -320,7 +328,9 @@ class TestProcessFilesCollisionFlow:
         _proposed(a, track=1)
         _proposed(b, track=1)
 
-        prompts.confirm_collision_resolution.return_value = "quit"
+        prompts.confirm_collision_resolution.return_value = (
+            CollisionResolutionAction.QUIT
+        )
 
         with pytest.raises(SystemExit):
             p._process_files([a, b])
@@ -607,7 +617,7 @@ class TestProcessSingleFileObjNoACR:
         p.acr_client.recognize_with_retry = Mock(return_value=None)
         p.discogs_client = None
 
-        prompts.handle_no_acr_match.return_value = "skip"
+        prompts.handle_no_acr_match.return_value = NoACRMatchAction.SKIP
 
         af = _af(track=None)  # incomplete tags so needs_processing=True
         cached = object()  # sentinel for folder_release
@@ -624,7 +634,7 @@ class TestProcessSingleFileObjNoACR:
         p.discogs_client = None
 
         manual = TrackMetadata(title="M", artist="A", album="B", track_number=1)
-        prompts.handle_no_acr_match.return_value = "manual"
+        prompts.handle_no_acr_match.return_value = NoACRMatchAction.MANUAL
         prompts.get_manual_metadata.return_value = manual
 
         af = _af(track=None)  # incomplete tags so needs_processing=True
@@ -658,7 +668,7 @@ class TestProcessSingleFileObjNoACR:
         p.acr_client.recognize_with_retry = Mock(return_value=None)
         p.discogs_client = None
 
-        prompts.handle_no_acr_match.return_value = "existing"
+        prompts.handle_no_acr_match.return_value = NoACRMatchAction.EXISTING
         prompts.get_modified_search_query = Mock(
             return_value=("", "")
         )  # no artist → skip
@@ -677,7 +687,7 @@ class TestProcessSingleFileObjNoACR:
         p.acr_client = Mock()
         p.acr_client.recognize_with_retry = Mock(return_value=None)
 
-        prompts.handle_no_acr_match.return_value = "quit"
+        prompts.handle_no_acr_match.return_value = NoACRMatchAction.QUIT
 
         with pytest.raises(SystemExit):
             p._process_single_file_obj(_af(track=None))  # incomplete tags
@@ -746,7 +756,7 @@ class TestProcessSingleFileObjCachedRelease:
         p.acr_client = Mock()
         p.acr_client.recognize_with_retry = Mock(return_value=acr)
 
-        prompts.handle_track_not_in_release.return_value = "skip"
+        prompts.handle_track_not_in_release.return_value = TrackNotInReleaseAction.SKIP
 
         with patch(
             "processor.matching.match_track_from_cached_release", return_value=False
@@ -766,7 +776,9 @@ class TestProcessSingleFileObjCachedRelease:
         p.acr_client = Mock()
         p.acr_client.recognize_with_retry = Mock(return_value=acr)
 
-        prompts.handle_track_not_in_release.return_value = "search"
+        prompts.handle_track_not_in_release.return_value = (
+            TrackNotInReleaseAction.SEARCH
+        )
 
         with (
             patch(
@@ -789,7 +801,7 @@ class TestProcessSingleFileObjCachedRelease:
         p.acr_client = Mock()
         p.acr_client.recognize_with_retry = Mock(return_value=acr)
 
-        prompts.handle_track_not_in_release.return_value = "quit"
+        prompts.handle_track_not_in_release.return_value = TrackNotInReleaseAction.QUIT
 
         with patch(
             "processor.matching.match_track_from_cached_release", return_value=False
@@ -815,7 +827,7 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p = _proc(config, args, prompts)
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
-        prompts.handle_no_discogs_match.return_value = "skip"
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.SKIP
         acr = Mock(title="Song", artists=["Artist"], album="Album")
         result = p._search_and_match_discogs(_af(), acr)
         assert result is None
@@ -825,7 +837,7 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p = _proc(config, args, prompts)
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
-        prompts.handle_no_discogs_match.return_value = "acr_only"
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.ACR_ONLY
         prompts.prompt_missing_fields.side_effect = lambda m, f: m
 
         af = _af(track=1)
@@ -840,7 +852,7 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
         p.discogs_client.get_release = Mock(return_value=None)
-        prompts.handle_no_discogs_match.return_value = "manual_url"
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL_URL
         prompts.get_discogs_url_or_id.return_value = 999
         acr = Mock(title="Song", artists=["Artist"], album="Album")
         result = p._search_and_match_discogs(_af(), acr)
@@ -851,7 +863,7 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p = _proc(config, args, prompts)
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
-        prompts.handle_no_discogs_match.return_value = "quit"
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.QUIT
         acr = Mock(title="Song", artists=["Artist"], album="Album")
         with pytest.raises(SystemExit):
             p._search_and_match_discogs(_af(), acr)
@@ -861,7 +873,7 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
         manual = TrackMetadata(title="M", artist="A", album="B", track_number=1)
-        prompts.handle_no_discogs_match.return_value = "manual"
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL
         prompts.get_manual_metadata.return_value = manual
         acr = Mock(title="Song", artists=["Artist"], album="Album")
         af = _af()

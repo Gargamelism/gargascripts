@@ -4,7 +4,13 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from models import ACRCloudResult, TrackMetadata
+from models import (
+    ACRCloudResult,
+    TrackMetadata,
+    NoACRMatchAction,
+    NoDiscogsMatchAction,
+    TrackNotInReleaseAction,
+)
 
 
 def get_discogs_url_or_id(ui) -> Optional[int]:
@@ -19,7 +25,7 @@ def get_discogs_url_or_id(ui) -> Optional[int]:
     if not value:
         return None
 
-    for pattern in [r'/release/(\d+)', r'^(\d+)$']:
+    for pattern in [r"/release/(\d+)", r"^(\d+)$"]:
         match = re.search(pattern, value)
         if match:
             return int(match.group(1))
@@ -28,7 +34,7 @@ def get_discogs_url_or_id(ui) -> Optional[int]:
     return None
 
 
-def handle_no_acr_match(ui, file_path: str) -> str:
+def handle_no_acr_match(ui, file_path: str) -> NoACRMatchAction:
     filename = Path(file_path).name
     print(f"\n{ui._c('yellow', f'No ACRCloud match for:')} {filename}")
     print()
@@ -38,13 +44,20 @@ def handle_no_acr_match(ui, file_path: str) -> str:
     print("  [q] Quit")
     return ui._prompt_choice(
         "Select option:",
-        {"1": "manual", "2": "existing", "3": "skip", "q": "quit"},
+        {
+            "1": NoACRMatchAction.MANUAL,
+            "2": NoACRMatchAction.EXISTING,
+            "3": NoACRMatchAction.SKIP,
+            "q": NoACRMatchAction.QUIT,
+        },
     )
 
 
-def handle_no_discogs_match(ui, acr_result: ACRCloudResult) -> str:
-    print(f"\n{ui._c('yellow', 'No Discogs match for:')} "
-          f"{acr_result.title} by {', '.join(acr_result.artists)}")
+def handle_no_discogs_match(ui, acr_result: ACRCloudResult) -> NoDiscogsMatchAction:
+    print(
+        f"\n{ui._c('yellow', 'No Discogs match for:')} "
+        f"{acr_result.title} by {', '.join(acr_result.artists)}"
+    )
     print()
     print("  [1] Use ACRCloud data only (partial tags)")
     print("  [2] Search Discogs with modified query")
@@ -55,13 +68,19 @@ def handle_no_discogs_match(ui, acr_result: ACRCloudResult) -> str:
     return ui._prompt_choice(
         "Select option:",
         {
-            "1": "acr_only", "2": "retry", "3": "manual_url",
-            "4": "manual", "5": "skip", "q": "quit",
+            "1": NoDiscogsMatchAction.ACR_ONLY,
+            "2": NoDiscogsMatchAction.RETRY,
+            "3": NoDiscogsMatchAction.MANUAL_URL,
+            "4": NoDiscogsMatchAction.MANUAL,
+            "5": NoDiscogsMatchAction.SKIP,
+            "q": NoDiscogsMatchAction.QUIT,
         },
     )
 
 
-def get_manual_metadata(ui, defaults: Optional[TrackMetadata] = None) -> Optional[TrackMetadata]:
+def get_manual_metadata(
+    ui, defaults: Optional[TrackMetadata] = None
+) -> Optional[TrackMetadata]:
     print(f"\n{ui._c('cyan', 'Enter metadata (press Enter to skip/keep default):')}")
 
     def prompt_field(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -91,7 +110,9 @@ def get_manual_metadata(ui, defaults: Optional[TrackMetadata] = None) -> Optiona
     album = prompt_field("Album", defaults.album if defaults else None)
     year = prompt_int("Year", defaults.year if defaults else None)
     track_num = prompt_int("Track #", defaults.track_number if defaults else None)
-    total_tracks = prompt_int("Total tracks", defaults.total_tracks if defaults else None)
+    total_tracks = prompt_int(
+        "Total tracks", defaults.total_tracks if defaults else None
+    )
     disc_num = prompt_int("Disc #", defaults.disc_number if defaults else None)
     total_discs = prompt_int("Total discs", defaults.total_discs if defaults else None)
     genre = prompt_field("Genre", defaults.genre if defaults else None)
@@ -111,7 +132,9 @@ def get_manual_metadata(ui, defaults: Optional[TrackMetadata] = None) -> Optiona
     return ui.prompt_missing_fields(metadata, "manual entry")
 
 
-def prompt_missing_fields(ui, metadata: TrackMetadata, filename: str) -> Optional[TrackMetadata]:
+def prompt_missing_fields(
+    ui, metadata: TrackMetadata, filename: str
+) -> Optional[TrackMetadata]:
     while True:
         missing = metadata.get_missing_required_fields()
         if not missing:
@@ -120,7 +143,9 @@ def prompt_missing_fields(ui, metadata: TrackMetadata, filename: str) -> Optiona
         if ui.auto_yes:
             print(f"\n{ui._c('yellow', f'Missing required fields for:')} {filename}")
             print(f"  Missing: {', '.join(missing)}")
-            print(f"  {ui._c('red', '[AUTO] Cannot proceed - missing required fields. Skipping.')}")
+            print(
+                f"  {ui._c('red', '[AUTO] Cannot proceed - missing required fields. Skipping.')}"
+            )
             return None
 
         print(f"\n{ui._c('yellow', f'Missing required fields for:')} {filename}")
@@ -163,7 +188,9 @@ def get_modified_search_query(ui, default_artist: str, default_track: str) -> tu
     return (artist or default_artist, track or default_track)
 
 
-def handle_track_not_in_release(ui, filename: str, release_title: str) -> str:
+def handle_track_not_in_release(
+    ui, filename: str, release_title: str
+) -> TrackNotInReleaseAction:
     print(f"\n{ui._c('yellow', f'Track not found in release:')} {filename}")
     print(f"  Release: {release_title}")
     print()
@@ -172,5 +199,9 @@ def handle_track_not_in_release(ui, filename: str, release_title: str) -> str:
     print("  [q] Quit")
     return ui._prompt_choice(
         "Select option:",
-        {"1": "search", "2": "skip", "q": "quit"},
+        {
+            "1": TrackNotInReleaseAction.SEARCH,
+            "2": TrackNotInReleaseAction.SKIP,
+            "q": TrackNotInReleaseAction.QUIT,
+        },
     )
