@@ -20,6 +20,7 @@ from config import (
 )
 from id3_handler import ID3Handler  # noqa: F401 — tests patch main.ID3Handler
 from interactive import InteractivePrompts
+from onedrive_sync import OneDriveSync
 from processor import ID3Processor
 
 
@@ -216,7 +217,16 @@ def main():
     )
 
     # Run processor
-    processor = ID3Processor(config, args, prompts)
+    onedrive_sync = (
+        OneDriveSync(
+            local_root=Path(args.onedrive_root),
+            remote=args.onedrive_remote,
+            rclone_path=args.rclone_path,
+        )
+        if args.mirror_onedrive
+        else None
+    )
+    processor = ID3Processor(config, args, prompts, onedrive_sync=onedrive_sync)
 
     try:
         processor.process(args.path)

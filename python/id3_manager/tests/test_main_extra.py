@@ -1431,7 +1431,7 @@ class TestMainFunction:
         ):
             MockProc.return_value.process = Mock()
 
-            def capture_init(config, a, prompts):
+            def capture_init(config, a, prompts, **kwargs):
                 captured_args.append(a)
                 return Mock(process=Mock())
 
@@ -1466,7 +1466,7 @@ class TestMainFunction:
         ):
             MockProc.return_value.process = Mock()
 
-            def capture_init(config, a, prompts):
+            def capture_init(config, a, prompts, **kwargs):
                 captured_args.append(a)
                 return Mock(process=Mock())
 

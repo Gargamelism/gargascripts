@@ -16,7 +16,7 @@ from id3_handler import ID3Handler
 from folder_manager import FolderManager
 from config import AppArgs, AppConfig
 from interactive import InteractivePrompts
-from onedrive_sync import OneDriveSync
+from onedrive_sync.protocols import RemoteSync
 from acrcloud_client import ACRCloudClient
 from discogs_client import DiscogsClient
 
@@ -28,21 +28,19 @@ from . import finalize as _finalize
 class ID3Processor:
     """Main processor for ID3 tag management."""
 
-    def __init__(self, config: AppConfig, args: AppArgs, prompts: InteractivePrompts):
+    def __init__(
+        self,
+        config: AppConfig,
+        args: AppArgs,
+        prompts: InteractivePrompts,
+        onedrive_sync: Optional[RemoteSync] = None,
+    ):
         self.config = config
         self.args = args
         self.prompts = prompts
         self.stats = ProcessingStats()
 
         self.id3_handler = ID3Handler()
-
-        onedrive_sync = None
-        if args.mirror_onedrive:
-            onedrive_sync = OneDriveSync(
-                local_root=Path(args.onedrive_root),
-                remote=args.onedrive_remote,
-                rclone_path=args.rclone_path,
-            )
         self.folder_manager = FolderManager(onedrive_sync=onedrive_sync)
 
         self.acr_client = None

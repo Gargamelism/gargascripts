@@ -5,7 +5,7 @@ from typing import Callable, List, Optional, Tuple
 
 from config import eprint
 from models import AlbumFolder, AudioFile
-from onedrive_sync import OneDriveSync
+from onedrive_sync.protocols import RemoteSync
 from sync_results import CommitResult, MoveResult
 from . import disc as _disc
 from . import naming as _naming
@@ -19,7 +19,7 @@ class FolderManager:
 
     ALBUM_FOLDER_PATTERN = r"^(\d{4})\s*-\s*(.+)$"
 
-    def __init__(self, onedrive_sync: Optional[OneDriveSync] = None):
+    def __init__(self, onedrive_sync: Optional[RemoteSync] = None):
         self.onedrive_sync = onedrive_sync
 
     def mirror_rename(
