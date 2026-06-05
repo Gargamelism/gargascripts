@@ -16,7 +16,9 @@ def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
     for af in audio_files:
         if af.proposed_tags:
             if proc.args.dry_run:
-                proc.prompts.print(f"  [DRY RUN] Would update: {Path(af.file_path).name}")
+                proc.prompts.print(
+                    f"  [DRY RUN] Would update: {Path(af.file_path).name}"
+                )
             else:
                 try:
                     success = proc.id3_handler.write_tags(
@@ -89,7 +91,7 @@ def handle_file_renames(proc, audio_files: List[AudioFile]) -> None:
         metadata = af.proposed_tags or af.current_tags
         if not proc.folder_manager.should_rename_file(af.file_path, metadata):
             continue
-        extension = Path(af.file_path).suffix
+        extension = Path(af.file_path).suffix.lower()
         new_name = proc.folder_manager.generate_filename(metadata, extension)
         if new_name:
             renames.append((af, new_name))
@@ -97,24 +99,36 @@ def handle_file_renames(proc, audio_files: List[AudioFile]) -> None:
     if not renames:
         return
 
-    if not proc.prompts.confirm_file_renames([(af.file_path, new_name) for af, new_name in renames]):
+    if not proc.prompts.confirm_file_renames(
+        [(af.file_path, new_name) for af, new_name in renames]
+    ):
         return
 
     for af, new_name in renames:
         file_path = af.file_path
         if proc.args.dry_run:
-            proc.prompts.print(f"  [DRY RUN] Would rename: {Path(file_path).name} -> {new_name}")
+            proc.prompts.print(
+                f"  [DRY RUN] Would rename: {Path(file_path).name} -> {new_name}"
+            )
         else:
             commit = proc.folder_manager.rename_audio_file(file_path, new_name)
             if commit.success:
                 if commit.message == "File already has correct name":
-                    proc.prompts.print(f"  Skipped (already correct): {Path(file_path).name}")
+                    proc.prompts.print(
+                        f"  Skipped (already correct): {Path(file_path).name}"
+                    )
                 else:
                     af.file_path = str(Path(file_path).parent / new_name)
-                    proc.prompts.print(f"  Renamed: {Path(file_path).name} -> {new_name}")
+                    proc.prompts.print(
+                        f"  Renamed: {Path(file_path).name} -> {new_name}"
+                    )
             else:
-                proc.prompts.print(f"  Failed: {Path(file_path).name} - {commit.message}")
-                proc.stats.errors.append(f"Failed to rename {file_path}: {commit.message}")
+                proc.prompts.print(
+                    f"  Failed: {Path(file_path).name} - {commit.message}"
+                )
+                proc.stats.errors.append(
+                    f"Failed to rename {file_path}: {commit.message}"
+                )
 
 
 def handle_folder_rename(proc, folder_path: str, audio_files: List[AudioFile]) -> None:
@@ -133,7 +147,9 @@ def handle_folder_rename(proc, folder_path: str, audio_files: List[AudioFile]) -
         new_name = proc.folder_manager.generate_folder_name(year, album)
         current_name = Path(folder_path).name
 
-        if proc.prompts.confirm_folder_rename(current_name, f"{new_name}/CD1-CD{total_discs}"):
+        if proc.prompts.confirm_folder_rename(
+            current_name, f"{new_name}/CD1-CD{total_discs}"
+        ):
             if proc.args.dry_run:
                 proc.prompts.print(f"  [DRY RUN] Would reorganize to: {new_name}/")
             else:
@@ -173,17 +189,19 @@ def discover_audio_files(proc, folder_path: str) -> List[AudioFile]:
                 af = AudioFile(
                     file_path=str(file_path),
                     format=ID3Handler.get_format(str(file_path)) or "unknown",
-                    current_tags=current_tags
+                    current_tags=current_tags,
                 )
                 audio_files.append(af)
             except Exception as e:
                 proc.stats.malformed_files.append(str(file_path))
                 eprint(f"Malformed file (skipping): {file_path.name} - {e}")
 
-    audio_files.sort(key=lambda af: (
-        af.current_tags.disc_number or 0,
-        af.current_tags.track_number or 999,
-        Path(af.file_path).name
-    ))
+    audio_files.sort(
+        key=lambda af: (
+            af.current_tags.disc_number or 0,
+            af.current_tags.track_number or 999,
+            Path(af.file_path).name,
+        )
+    )
 
     return audio_files

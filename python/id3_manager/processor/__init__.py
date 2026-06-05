@@ -114,7 +114,7 @@ class ID3Processor:
 
         folders_to_process = set()
         for ext in ID3Handler.SUPPORTED_EXTENSIONS:
-            for audio_file in base.rglob(f"*{ext}"):
+            for audio_file in base.rglob(f"*{ext}", case_sensitive=False):
                 folders_to_process.add(str(audio_file.parent))
 
         if not self.args.include_root:

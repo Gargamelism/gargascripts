@@ -74,11 +74,11 @@ def get_album_info_from_files(
 
 
 def should_rename_file(current_path: str, metadata) -> bool:
-    extension = Path(current_path).suffix
+    extension = Path(current_path).suffix.lower()
     expected_filename = generate_filename(metadata, extension)
     if expected_filename is None:
         return False
-    return Path(current_path).stem != Path(expected_filename).stem
+    return Path(current_path).name != expected_filename
 
 
 def rename_folder(
