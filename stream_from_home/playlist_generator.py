@@ -1,9 +1,11 @@
+import json
 import os
 import re
 import random
 import argparse
-from typing import List, Optional, Tuple, Dict, Set
 from dataclasses import dataclass
+from functools import lru_cache
+from typing import List, Optional, Tuple, Dict
 
 
 @dataclass
@@ -12,29 +14,41 @@ class FolderInfo:
     all_subfolders: List[str]  # All subfolders recursively
 
 
+@dataclass
+class SpecialBandsConfig:
+    preferred_bands: List[str] = None
+    pending_bands: List[str] = None
+
+
 def scan_subfolders(base_folder: str) -> FolderInfo:
     """Scan and return both immediate and recursive subfolders from the base folder."""
     immediate_subfolders = []
     all_subfolders = []
+    folders_to_scan = [base_folder]
 
     try:
-        # Get immediate subfolders
-        with os.scandir(base_folder) as entries:
-            for entry in entries:
-                if entry.is_dir():
-                    subfolder_path = entry.path
-                    immediate_subfolders.append(subfolder_path)
-                    all_subfolders.append(subfolder_path)
+        while folders_to_scan:
+            current_folder = folders_to_scan.pop()
+            with os.scandir(current_folder) as entries:
+                for entry in entries:
+                    if entry.is_dir():
+                        subfolder_path = entry.path
+                        immediate_subfolders.append(subfolder_path)
+                        all_subfolders.append(subfolder_path)
+                        folders_to_scan.append(subfolder_path)
 
-                    # Recursively scan subfolders
-                    nested_info = scan_subfolders(subfolder_path)
-                    all_subfolders.extend(nested_info.all_subfolders)
     except (FileNotFoundError, PermissionError):
         print(f"Access denied or folder not found: {base_folder}")
     except Exception as e:
         print(f"Error accessing {base_folder}: {e}")
 
     return FolderInfo(immediate_subfolders, all_subfolders)
+
+
+@lru_cache(maxsize=1)
+def get_folder_info(base_folder: str) -> FolderInfo:
+    """Get all subfolders recursively from the base folder."""
+    return scan_subfolders(base_folder)
 
 
 def get_random_subfolder(base_folder: str, recursive: bool = True) -> Optional[str]:
@@ -46,14 +60,7 @@ def get_random_subfolder(base_folder: str, recursive: bool = True) -> Optional[s
         base_folder: The folder to get a subfolder from
         recursive: Parameter kept for compatibility, but defaults to True
     """
-    global _scandir_cache
-    if "_scandir_cache" not in globals():
-        _scandir_cache = {}
-
-    if base_folder not in _scandir_cache:
-        _scandir_cache[base_folder] = scan_subfolders(base_folder)
-
-    folder_info = _scandir_cache[base_folder]
+    folder_info = get_folder_info(base_folder)
     subfolders = (
         folder_info.all_subfolders if recursive else folder_info.immediate_subfolders
     )
@@ -96,29 +103,19 @@ def get_albums(base_folder: str, number_of_albums: int) -> List[str]:
     return playlist_paths
 
 
-def get_preferred_album(preferred_base: str) -> Optional[str]:
+def get_additional_band_album(band_name: str, folder_info: FolderInfo) -> Optional[str]:
     """Try to get an album from the predefined list of preferred bands."""
-    preferred_bands = [
-        "System of a Down",
-        "Deftones",
-        "Tool",
-        "Metallica",
-        "Cat Empire, The",
-        "Rage Against The Machine",
-        "Cake",
-        "Marilyn Manson",
-        "Chemical Brothers, The",
-        "Offspring, The",
-        "Primus",
-        "Zappa, Frank",
-        "Residents, The",
-    ]
+    band_folder = next(
+        (
+            folder
+            for folder in folder_info.all_subfolders
+            if os.path.basename(folder) == band_name
+        ),
+        None,
+    )
 
-    selected_band = random.choice(preferred_bands)
-    band_folder = os.path.join(preferred_base, selected_band)
-
-    if not os.path.isdir(band_folder):
-        print(f"Preferred band folder not found: {band_folder}")
+    if not band_folder:
+        print(f"Preferred band '{band_name}' not found in the music collection.")
         return None
 
     return get_random_subfolder(band_folder)
@@ -162,10 +159,14 @@ def convert_to_server_paths(
             # Use the specific prefix for this root
             rel_path = get_relative_path(path, matching_root)
             # Use forward slashes for server paths (URL-style)
-            server_path = os.path.join(roots[matching_root], rel_path).replace(os.sep, "/")
+            server_path = os.path.join(roots[matching_root], rel_path).replace(
+                os.sep, "/"
+            )
         else:
             # Fallback to just using the basename with the default prefix
-            server_path = os.path.join(server_prefix, os.path.basename(path)).replace(os.sep, "/")
+            server_path = os.path.join(server_prefix, os.path.basename(path)).replace(
+                os.sep, "/"
+            )
 
         server_paths.append(server_path)
 
@@ -234,7 +235,7 @@ def save_playlist(playlist_content: List[str], output_path: str) -> None:
     try:
         with open(output_path, "w", encoding="utf-8") as file:
             file.write("\n".join(playlist_items))
-        print(f"\nPlaylist saved successfully to: {output_path}")
+        print(f"\nPlaylist saved successfully to: {output_path} containing {len(playlist_items)} tracks.")
     except IOError as e:
         print(f"Error saving playlist: {e}")
 
@@ -262,14 +263,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Server prefix for main music collection (default: /music/)",
     )
     parser.add_argument(
-        "--pending-base", help="Base folder containing pending/new music"
-    )
-    parser.add_argument(
-        "--pending-prefix",
-        default="/pending/",
-        help="Server prefix for pending music (default: /pending/)",
-    )
-    parser.add_argument(
         "--keep-local-paths",
         action="store_true",
         help="Convert local paths to server paths in the playlist",
@@ -282,8 +275,8 @@ def parse_arguments() -> argparse.Namespace:
         help="Number of albums to include (default: 10)",
     )
     parser.add_argument(
-        "--preferred-base",
-        help="Base folder containing preferred bands (optional)",
+        "--special-bands",
+        help="Special bands to include in the playlist",
     )
     return parser.parse_args()
 
@@ -325,9 +318,8 @@ def get_album_tracks(playlist_paths) -> List[str]:
                 for file_name in music_files:
                     full = os.path.abspath(os.path.join(root, file_name))
                     found_files.append(full)
-
-        # skip non-existent paths
-        print(f"Skipping missing or unsupported path: {path}")
+        else: 
+            print(f"Skipping missing or unsupported path: {path}")
 
     return found_files
 
@@ -342,28 +334,36 @@ def generate_playlist() -> None:
     if not music_base:
         return
 
+    special_bands = None
+    if args.special_bands:
+        if not os.path.isfile(args.special_bands):
+            print(f"Error: Additional config file not found: {args.special_bands}")
+            return
+        with open(args.special_bands, "r") as f:
+            special_bands = SpecialBandsConfig(**json.load(f))
+
     # Get main albums
     playlist_paths = get_albums(music_base, args.number)
 
-    # add pending albums
-    pending_base = validate_folder(args.pending_base) if args.pending_base else None
-    if pending_base:
-        playlist_paths.extend(get_albums(pending_base, 1))
-
     # add preferred album if preferred base is provided
-    if args.preferred_base:
-        preferred_base = validate_folder(args.preferred_base)
-        if preferred_base:
-            preferred_album = get_preferred_album(preferred_base)
-            if preferred_album:
-                playlist_paths.append(preferred_album)
+    if special_bands and special_bands.preferred_bands:
+        preferred_band = random.choice(special_bands.preferred_bands)
+        preferred_album = get_additional_band_album(preferred_band, folder_info=get_folder_info(music_base))
+        if preferred_album:
+            playlist_paths.append(preferred_album)
+
+    if special_bands and special_bands.pending_bands:
+        pending_band = random.choice(special_bands.pending_bands)
+        pending_album = get_additional_band_album(pending_band, folder_info=get_folder_info(music_base))
+        if pending_album:
+            playlist_paths.append(pending_album)
 
     # Try to add a preferred band album
     playlist_tracks = get_album_tracks(playlist_paths)
 
     if not args.keep_local_paths:
         # Initialize roots dictionary with the main music folder
-        roots = {music_base: args.music_prefix, pending_base: args.pending_prefix}
+        roots = {music_base: args.music_prefix}
         # Convert paths using the collected roots
         playlist_tracks = convert_to_server_paths(
             paths=playlist_tracks,
