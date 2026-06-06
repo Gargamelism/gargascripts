@@ -926,6 +926,9 @@ class TestRenameOnly:
             return_value=CommitResult(success=True, message="/new/path.mp3")
         )
         processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
+        processor.folder_manager.get_album_info_from_files = Mock(
+            return_value=(None, None)
+        )
         processor.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
 
         af = AudioFile(

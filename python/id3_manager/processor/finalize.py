@@ -132,13 +132,16 @@ def handle_file_renames(proc, audio_files: List[AudioFile]) -> None:
 
 
 def handle_folder_rename(proc, folder_path: str, audio_files: List[AudioFile]) -> None:
-    if proc.folder_manager.is_folder_properly_named(folder_path):
-        return
-
     year, album = proc.folder_manager.get_album_info_from_files(audio_files)
 
     if not year or not album:
+        if proc.folder_manager.is_folder_properly_named(folder_path):
+            return
         proc.prompts.print("\nCannot determine album year/name for folder rename.")
+        return
+
+    expected_name = proc.folder_manager.generate_folder_name(year, album)
+    if Path(folder_path).name == expected_name:
         return
 
     total_discs = proc.folder_manager.detect_multi_disc_from_metadata(audio_files)

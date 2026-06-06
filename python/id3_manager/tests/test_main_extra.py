@@ -543,6 +543,7 @@ class TestProcessFolderMultiDisc:
             side_effect=lambda path, disc, dry_run=False: CommitResult(True, path)
         )
         p.folder_manager.is_folder_properly_named = Mock(return_value=True)
+        p.folder_manager.get_album_info_from_files = Mock(return_value=(None, None))
 
         def fake_discover(folder_path):
             return [
@@ -1165,6 +1166,7 @@ class TestHandleFolderRename:
         p = _proc(config, args, prompts)
         p.folder_manager = Mock()
         p.folder_manager.is_folder_properly_named = Mock(return_value=True)
+        p.folder_manager.get_album_info_from_files = Mock(return_value=(None, None))
 
         p._handle_folder_rename(str(tmp_path), [])
 
