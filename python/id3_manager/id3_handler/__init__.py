@@ -59,12 +59,8 @@ class ID3Handler:
     def _read_mp3_tags(self, file_path: str) -> TrackMetadata:
         audio = MP3(file_path)
         tags = audio.tags or {}
-        track_num, total_tracks = _parse_track_disc(
-            str(tags.get("TRCK", [""])[0]) if tags.get("TRCK") else ""
-        )
-        disc_num, total_discs = _parse_track_disc(
-            str(tags.get("TPOS", [""])[0]) if tags.get("TPOS") else ""
-        )
+        track_num, total_tracks = _parse_track_disc(_get_tag_str(tags, "TRCK") or "")
+        disc_num, total_discs = _parse_track_disc(_get_tag_str(tags, "TPOS") or "")
         return TrackMetadata(
             title=_get_tag_str(tags, "TIT2"),
             artist=_get_tag_str(tags, "TPE1"),

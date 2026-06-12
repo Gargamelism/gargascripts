@@ -41,7 +41,10 @@ def get_tag_str(tags: dict, key: str) -> Optional[str]:
     """Get string value from ID3 tag dict."""
     tag = tags.get(key)
     if tag:
-        value = str(tag[0]) if hasattr(tag, "__getitem__") else str(tag)
+        try:
+            value = str(tag[0]) if hasattr(tag, "__getitem__") else str(tag)
+        except IndexError:
+            return None
         return value if value else None
     return None
 
