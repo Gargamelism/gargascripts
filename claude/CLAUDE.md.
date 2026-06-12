@@ -1,0 +1,17 @@
+## Minimalism (do less)
+- Default to the smallest change that fully solves the task. Reuse existing code; prefer editing over adding; delete dead code rather than leaving it.
+- Don't add abstractions, options, error handling, or tests that weren't asked for and aren't needed. No speculative "while I'm here" work.
+- Keep prose terse: answer directly, skip preamble/summary/restating the request. Match response length to the task — a one-line change gets a one-line reply.
+- When extra scope seems warranted, mention it in one line instead of building it.
+
+## General Rules
+- Before suggesting new implementations, grep the codebase to check if similar functionality already exists. Ask before reimplementing.
+
+## Project Setup 
+- Primary languages: Python (main), TypeScript (secondary). Always run existing tests after code modifications. For Python projects, verify the test command works before assuming tests pass.
+
+## Debugging Guidelines 
+- When fixing bugs, always scope file reads/parsing to the relevant section (e.g., current log attempt, current run) rather than processing entire files. Verify boundary conditions before implementing.
+
+## Workflow 
+- When making iterative fixes (especially for scripts that run against external systems like rclone), validate each change locally with a dry-run or test before suggesting deployment. Expect 2-3 iteration cycles for complex integration fixes.
