@@ -6,7 +6,7 @@ from models import DiscogsRelease, DiscogsTrack
 
 # Position format patterns
 _RE_VINYL = re.compile(r"^([A-Za-z])(\d+)$")
-_RE_DISC_TRACK = re.compile(r"^(\d+)-(\d+)$")
+_RE_DISC_TRACK = re.compile(r"^(\d+)-(\d+)(?:\.\d+)?$")
 _RE_CD_TRACK = re.compile(r"^CD(\d+)-(\d+)$", re.IGNORECASE)
 _RE_SIMPLE_TRACK = re.compile(r"^(\d+)$")
 
@@ -42,7 +42,7 @@ def parse_position(position: str) -> tuple:
     if vinyl_match:
         side = vinyl_match.group(1).upper()
         track = int(vinyl_match.group(2))
-        disc = (ord(side) - ord('A')) // 2 + 1
+        disc = (ord(side) - ord("A")) // 2 + 1
         return track, disc
 
     simple_match = _RE_SIMPLE_TRACK.match(position)
@@ -63,11 +63,13 @@ def parse_release(data: dict) -> DiscogsRelease:
         position = track_data.get("position", "")
         if is_vinyl_position(position):
             has_vinyl_positions = True
-        raw_tracks.append({
-            "position": position,
-            "title": track_data.get("title", ""),
-            "duration": track_data.get("duration"),
-        })
+        raw_tracks.append(
+            {
+                "position": position,
+                "title": track_data.get("title", ""),
+                "duration": track_data.get("duration"),
+            }
+        )
 
     tracklist = []
 
@@ -89,40 +91,46 @@ def parse_release(data: dict) -> DiscogsRelease:
         current_disc = 1
 
         for side, track_on_side, track_data in vinyl_tracks:
-            disc = (ord(side) - ord('A')) // 2 + 1
+            disc = (ord(side) - ord("A")) // 2 + 1
             if disc != current_disc:
                 track_number = 1
                 current_disc = disc
 
-            tracklist.append(DiscogsTrack(
-                position=track_data["position"],
-                title=track_data["title"],
-                duration=track_data["duration"],
-                track_number=track_number,
-                disc_number=disc,
-            ))
+            tracklist.append(
+                DiscogsTrack(
+                    position=track_data["position"],
+                    title=track_data["title"],
+                    duration=track_data["duration"],
+                    track_number=track_number,
+                    disc_number=disc,
+                )
+            )
             track_number += 1
 
         for track_data in non_vinyl_tracks:
             track_num, disc_num = parse_position(track_data["position"])
-            tracklist.append(DiscogsTrack(
-                position=track_data["position"],
-                title=track_data["title"],
-                duration=track_data["duration"],
-                track_number=track_num,
-                disc_number=disc_num,
-            ))
+            tracklist.append(
+                DiscogsTrack(
+                    position=track_data["position"],
+                    title=track_data["title"],
+                    duration=track_data["duration"],
+                    track_number=track_num,
+                    disc_number=disc_num,
+                )
+            )
     else:
         for track_data in raw_tracks:
             position = track_data["position"]
             track_num, disc_num = parse_position(position)
-            tracklist.append(DiscogsTrack(
-                position=position,
-                title=track_data["title"],
-                duration=track_data["duration"],
-                track_number=track_num,
-                disc_number=disc_num,
-            ))
+            tracklist.append(
+                DiscogsTrack(
+                    position=position,
+                    title=track_data["title"],
+                    duration=track_data["duration"],
+                    track_number=track_num,
+                    disc_number=disc_num,
+                )
+            )
 
     disc_numbers = {t.disc_number for t in tracklist if t.disc_number}
     total_discs = max(disc_numbers) if disc_numbers else 1

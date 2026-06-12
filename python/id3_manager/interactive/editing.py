@@ -84,6 +84,7 @@ def handle_edit_album(ui, audio_files: List[AudioFile]) -> None:
         "y": ("Year", "year", True),
         "g": ("Genre", "genre", False),
         "N": ("Total Tracks", "total_tracks", True),
+        "d": ("Disc Number", "disc_number", True),
         "D": ("Total Discs", "total_discs", True),
     }
 
