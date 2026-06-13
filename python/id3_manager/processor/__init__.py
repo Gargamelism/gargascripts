@@ -11,6 +11,7 @@ from models import (
     ProcessingStats,
     AlbumFolder,
     CollisionMap,
+    ConfirmAction,
 )
 from id3_handler import ID3Handler
 from folder_manager import FolderManager
@@ -71,6 +72,7 @@ class ID3Processor:
             eprint(f"Path not found: {path}")
             sys.exit(1)
 
+        self._review_skipped_files()
         self.prompts.show_summary(self.stats)
 
     def _filter_folders_from_start(
@@ -230,6 +232,25 @@ class ID3Processor:
                     af.proposed_tags.disc_number = disc_folder.detected_disc_number
 
             self._process_files(files_to_process)
+
+    def _review_skipped_files(self) -> None:
+        skipped = self.stats.skipped_files
+        if not skipped:
+            return
+        self.prompts.review_skipped_files(skipped)
+
+        files_with_changes = [af for af in skipped if af.has_actual_changes]
+        if files_with_changes:
+            for af in files_with_changes:
+                self.prompts.show_file_comparison(af)
+            result = self.prompts.confirm_tag_changes(files_with_changes)
+            match result:
+                case ConfirmAction.APPLY:
+                    _finalize.apply_tag_changes(self, files_with_changes)
+                case ConfirmAction.QUIT:
+                    import sys
+
+                    sys.exit(0)
 
     # --- Dispatch shims ---
 

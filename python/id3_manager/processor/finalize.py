@@ -12,7 +12,6 @@ from id3_handler import ID3Handler
 
 def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
     write_failed = False
-    tagged_files: List[AudioFile] = []
     for af in audio_files:
         if af.proposed_tags:
             if proc.args.dry_run:
@@ -30,17 +29,16 @@ def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
                     write_failed = True
                     break
                 if success:
-                    proc.stats.tags_updated += 1
                     proc.prompts.print(f"  Updated: {Path(af.file_path).name}")
-                    tagged_files.append(af)
+                    proc.stats.tagged_files.append(af)
                 else:
                     proc.stats.errors.append(f"Failed to write tags: {af.file_path}")
 
     if not write_failed and not proc.args.no_file_rename:
         proc._handle_file_renames(audio_files)
 
-    if tagged_files and not proc.args.dry_run:
-        proc._push_tag_writes_to_onedrive(tagged_files)
+    if proc.stats.tagged_files and not proc.args.dry_run:
+        proc._push_tag_writes_to_onedrive(proc.stats.tagged_files)
 
 
 def push_tag_writes_to_onedrive(proc, files: List[AudioFile]) -> None:
@@ -160,7 +158,7 @@ def handle_folder_rename(proc, folder_path: str, audio_files: List[AudioFile]) -
                     folder_path, audio_files, year, album, proc.args.dry_run
                 )
                 if success:
-                    proc.stats.folders_renamed += 1
+                    proc.stats.renamed_folders.append(folder_path)
                     proc.prompts.print(f"  Reorganized to: {msg}")
                 else:
                     proc.stats.errors.append(msg)
@@ -175,7 +173,7 @@ def handle_folder_rename(proc, folder_path: str, audio_files: List[AudioFile]) -
                 else:
                     commit = proc.folder_manager.rename_folder(folder_path, new_name)
                     if commit.success:
-                        proc.stats.folders_renamed += 1
+                        proc.stats.renamed_folders.append(new_name)
                         proc.prompts.print(f"  Renamed to: {new_name}")
                     else:
                         proc.stats.errors.append(commit.message)

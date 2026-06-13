@@ -133,6 +133,39 @@ def handle_edit_album(ui, audio_files: List[AudioFile]) -> None:
         )
 
 
+def review_skipped_files(ui, skipped_files: List[AudioFile]) -> None:
+    while True:
+        print(
+            f"\n{ui._c('cyan', f'Skipped files ({len(skipped_files)}) — select to edit:')}"
+        )
+        for i, af in enumerate(skipped_files, 1):
+            filename = Path(af.file_path).name
+            tags = af.proposed_tags or af.current_tags
+            title = tags.title or ui._c("dim", "(no title)")
+            artist = tags.artist or ui._c("dim", "(no artist)")
+            print(f"  [{i}] {filename}  —  {artist} / {title}")
+        print("  [d] Done")
+
+        choice = (
+            input(f"\n{ui._c('bold', f'Select file [1-{len(skipped_files)}/d]: ')} ")
+            .strip()
+            .lower()
+        )
+        if choice == "d":
+            return
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(skipped_files):
+                af = skipped_files[idx - 1]
+                if af.proposed_tags is None:
+                    af.proposed_tags = dataclasses.replace(af.current_tags)
+                ui._edit_track_fields(af)
+                continue
+        except ValueError:
+            pass
+        print(ui._c("red", "Invalid selection. Try again."))
+
+
 def edit_track_fields(ui, audio_file: AudioFile) -> None:
     if not audio_file.proposed_tags:
         print(ui._c("yellow", "This file has no proposed tags to edit."))

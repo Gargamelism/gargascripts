@@ -265,6 +265,9 @@ class InteractivePrompts:
         return _search.handle_track_not_in_release(self, filename, release_title)
 
     # --- Editing shims ---
+    def review_skipped_files(self, skipped_files: List[AudioFile]) -> None:
+        return _editing.review_skipped_files(self, skipped_files)
+
     def _handle_edit_track(self, audio_files: List[AudioFile]) -> None:
         return _editing.handle_edit_track(self, audio_files)
 

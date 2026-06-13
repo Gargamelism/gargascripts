@@ -9,7 +9,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from interactive import InteractivePrompts
-from models import TrackMetadata, AudioFile, ProcessingStats, ACRCloudResult, ConfirmAction
+from models import (
+    TrackMetadata,
+    AudioFile,
+    ProcessingStats,
+    ACRCloudResult,
+    ConfirmAction,
+)
 
 
 @pytest.fixture
@@ -98,6 +104,7 @@ class TestAutoYesBehavior:
     def test_confirm_tag_changes_returns_apply(self, prompts_auto_yes):
         """Should return 'apply' in auto_yes mode without prompting."""
         from models import AudioFile, TrackMetadata
+
         files = [
             AudioFile(
                 file_path="/fake/song.mp3",
@@ -123,6 +130,7 @@ class TestAutoYesBehavior:
     def test_show_discogs_candidates_selects_first(self, prompts_auto_yes):
         """Should select first release in auto_yes mode."""
         from models import DiscogsRelease
+
         releases = [
             DiscogsRelease(
                 release_id=1,
@@ -150,31 +158,36 @@ class TestGetDiscogsUrlOrId:
 
     def test_parses_full_url(self, prompts):
         """Should extract release ID from full URL."""
-        with patch('builtins.input', return_value="https://www.discogs.com/release/12345-Artist-Album"):
+        with patch(
+            "builtins.input",
+            return_value="https://www.discogs.com/release/12345-Artist-Album",
+        ):
             result = prompts.get_discogs_url_or_id()
             assert result == 12345
 
     def test_parses_short_url(self, prompts):
         """Should extract release ID from short URL."""
-        with patch('builtins.input', return_value="https://www.discogs.com/release/12345"):
+        with patch(
+            "builtins.input", return_value="https://www.discogs.com/release/12345"
+        ):
             result = prompts.get_discogs_url_or_id()
             assert result == 12345
 
     def test_parses_just_id(self, prompts):
         """Should extract release ID when just number is provided."""
-        with patch('builtins.input', return_value="12345"):
+        with patch("builtins.input", return_value="12345"):
             result = prompts.get_discogs_url_or_id()
             assert result == 12345
 
     def test_returns_none_for_empty_input(self, prompts):
         """Should return None for empty input."""
-        with patch('builtins.input', return_value=""):
+        with patch("builtins.input", return_value=""):
             result = prompts.get_discogs_url_or_id()
             assert result is None
 
     def test_returns_none_for_invalid_input(self, prompts):
         """Should return None for invalid input."""
-        with patch('builtins.input', return_value="not-a-valid-url-or-id"):
+        with patch("builtins.input", return_value="not-a-valid-url-or-id"):
             result = prompts.get_discogs_url_or_id()
             assert result is None
 
@@ -237,18 +250,18 @@ class TestShowSummary:
         """Should display all processing statistics."""
         stats = ProcessingStats()
         stats.total_files = 10
-        stats.tags_updated = 5
-        stats.files_skipped = 2
+        stats.tagged_files = [object()] * 5
+        stats.skipped_files = [object(), object()]  # files_skipped = len(skipped_files)
         stats.acr_lookups = 8
         stats.discogs_lookups = 6
-        stats.folders_renamed = 1
+        stats.renamed_folders = ["folder"]
 
         prompts.show_summary(stats)
         captured = capsys.readouterr()
 
         assert "10" in captured.out  # total_files
-        assert "5" in captured.out   # tags_updated
-        assert "2" in captured.out   # files_skipped
+        assert "5" in captured.out  # tags_updated
+        assert "2" in captured.out  # files_skipped
 
     def test_displays_malformed_files(self, prompts, capsys):
         """Should display malformed files list."""
@@ -327,7 +340,7 @@ class TestPromptChoice:
 
     def test_accepts_y(self, prompts):
         """Should return mapped value for 'y' input."""
-        with patch('builtins.input', return_value="y"):
+        with patch("builtins.input", return_value="y"):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -337,7 +350,7 @@ class TestPromptChoice:
 
     def test_accepts_yes(self, prompts):
         """Should return mapped value for 'yes' input."""
-        with patch('builtins.input', return_value="yes"):
+        with patch("builtins.input", return_value="yes"):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -347,7 +360,7 @@ class TestPromptChoice:
 
     def test_case_insensitive(self, prompts):
         """Should handle uppercase input."""
-        with patch('builtins.input', return_value="Y"):
+        with patch("builtins.input", return_value="Y"):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -357,7 +370,7 @@ class TestPromptChoice:
 
     def test_accepts_n(self, prompts):
         """Should return mapped value for 'n' input."""
-        with patch('builtins.input', return_value="n"):
+        with patch("builtins.input", return_value="n"):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -367,7 +380,7 @@ class TestPromptChoice:
 
     def test_accepts_no(self, prompts):
         """Should return mapped value for 'no' input."""
-        with patch('builtins.input', return_value="no"):
+        with patch("builtins.input", return_value="no"):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -377,7 +390,7 @@ class TestPromptChoice:
 
     def test_empty_input_returns_default(self, prompts):
         """Should return default value for empty input when default is set."""
-        with patch('builtins.input', return_value=""):
+        with patch("builtins.input", return_value=""):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -387,7 +400,7 @@ class TestPromptChoice:
 
     def test_empty_input_loops_when_no_default(self, prompts):
         """Should re-prompt when empty input and no default."""
-        with patch('builtins.input', side_effect=["", "1"]):
+        with patch("builtins.input", side_effect=["", "1"]):
             result = prompts._prompt_choice(
                 "Select option:",
                 {"1": "manual", "2": "skip"},
@@ -396,7 +409,7 @@ class TestPromptChoice:
 
     def test_invalid_input_loops_then_accepts(self, prompts, capsys):
         """Should show error and re-prompt on invalid input."""
-        with patch('builtins.input', side_effect=["maybe", "y"]):
+        with patch("builtins.input", side_effect=["maybe", "y"]):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "yes": True, "n": False, "no": False},
@@ -408,7 +421,7 @@ class TestPromptChoice:
 
     def test_numbered_choices(self, prompts):
         """Should work with numbered menu options."""
-        with patch('builtins.input', return_value="2"):
+        with patch("builtins.input", return_value="2"):
             result = prompts._prompt_choice(
                 "Select option:",
                 {"1": "manual", "2": "existing", "3": "skip", "q": "quit"},
@@ -417,7 +430,7 @@ class TestPromptChoice:
 
     def test_strips_whitespace(self, prompts):
         """Should strip whitespace from input."""
-        with patch('builtins.input', return_value="  y  "):
+        with patch("builtins.input", return_value="  y  "):
             result = prompts._prompt_choice(
                 "Confirm? [y/N]:",
                 {"y": True, "n": False},
@@ -432,28 +445,28 @@ class TestConfirmFileRenamesInput:
     def test_accepts_yes(self, prompts):
         """Should accept 'yes' as confirmation."""
         renames = [("/path/old.mp3", "new.mp3")]
-        with patch('builtins.input', return_value="yes"):
+        with patch("builtins.input", return_value="yes"):
             result = prompts.confirm_file_renames(renames)
             assert result is True
 
     def test_accepts_y(self, prompts):
         """Should accept 'y' as confirmation."""
         renames = [("/path/old.mp3", "new.mp3")]
-        with patch('builtins.input', return_value="y"):
+        with patch("builtins.input", return_value="y"):
             result = prompts.confirm_file_renames(renames)
             assert result is True
 
     def test_rejects_n(self, prompts):
         """Should reject with 'n'."""
         renames = [("/path/old.mp3", "new.mp3")]
-        with patch('builtins.input', return_value="n"):
+        with patch("builtins.input", return_value="n"):
             result = prompts.confirm_file_renames(renames)
             assert result is False
 
     def test_default_is_no(self, prompts):
         """Should default to no on empty input."""
         renames = [("/path/old.mp3", "new.mp3")]
-        with patch('builtins.input', return_value=""):
+        with patch("builtins.input", return_value=""):
             result = prompts.confirm_file_renames(renames)
             assert result is False
 
@@ -463,25 +476,25 @@ class TestConfirmFolderRenameInput:
 
     def test_accepts_yes(self, prompts):
         """Should accept 'yes' as confirmation."""
-        with patch('builtins.input', return_value="yes"):
+        with patch("builtins.input", return_value="yes"):
             result = prompts.confirm_folder_rename("Old", "New")
             assert result is True
 
     def test_accepts_y(self, prompts):
         """Should accept 'y' as confirmation."""
-        with patch('builtins.input', return_value="y"):
+        with patch("builtins.input", return_value="y"):
             result = prompts.confirm_folder_rename("Old", "New")
             assert result is True
 
     def test_rejects_no(self, prompts):
         """Should reject with 'no'."""
-        with patch('builtins.input', return_value="no"):
+        with patch("builtins.input", return_value="no"):
             result = prompts.confirm_folder_rename("Old", "New")
             assert result is False
 
     def test_default_is_no(self, prompts):
         """Should default to no on empty input."""
-        with patch('builtins.input', return_value=""):
+        with patch("builtins.input", return_value=""):
             result = prompts.confirm_folder_rename("Old", "New")
             assert result is False
 
@@ -491,15 +504,17 @@ class TestGetModifiedSearchQuery:
 
     def test_returns_defaults_when_empty(self, prompts):
         """Should return default values when user enters empty input."""
-        with patch('builtins.input', return_value=""):
-            artist, track = prompts.get_modified_search_query("Default Artist", "Default Track")
+        with patch("builtins.input", return_value=""):
+            artist, track = prompts.get_modified_search_query(
+                "Default Artist", "Default Track"
+            )
             assert artist == "Default Artist"
             assert track == "Default Track"
 
     def test_returns_user_input(self, prompts):
         """Should return user-provided values."""
         inputs = iter(["New Artist", "New Track"])
-        with patch('builtins.input', side_effect=lambda _: next(inputs)):
+        with patch("builtins.input", side_effect=lambda _: next(inputs)):
             artist, track = prompts.get_modified_search_query("Default", "Default")
             assert artist == "New Artist"
             assert track == "New Track"

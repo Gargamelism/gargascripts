@@ -32,7 +32,6 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
     for i, af in enumerate(audio_files):
         proc.prompts.show_progress(i + 1, len(audio_files), Path(af.file_path).name)
         folder_release = process_single_file_obj(proc, af, folder_release)
-        proc.stats.files_processed += 1
 
     _finalize.backfill_disc_info(proc, audio_files)
 
@@ -53,7 +52,7 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
                 conflicting = {af for grp in collisions.values() for af in grp}
                 for af in conflicting:
                     af.proposed_tags = None
-                proc.stats.files_skipped += len(conflicting)
+                proc.stats.skipped_files.extend(conflicting)
         break
 
     files_with_changes = [af for af in audio_files if af.has_actual_changes]
@@ -70,7 +69,7 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
             case ConfirmAction.QUIT:
                 sys.exit(0)
             case _:
-                proc.stats.files_skipped += len(files_with_changes)
+                proc.stats.skipped_files.extend(files_with_changes)
 
     if not proc.args.no_file_rename:
         files_only_needing_rename = [
@@ -138,7 +137,7 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
                 if manual_tags:
                     af.proposed_tags = manual_tags
                 else:
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                 return folder_release
             case NoACRMatchAction.EXISTING:
                 title = af.current_tags.title or ""
@@ -166,10 +165,10 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
                     )()
                 else:
                     proc.prompts.print("  No artist provided, skipping.")
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                     return folder_release
             case NoACRMatchAction.SKIP:
-                proc.stats.files_skipped += 1
+                proc.stats.skipped_files.append(af)
                 return folder_release
             case NoACRMatchAction.QUIT:
                 sys.exit(0)
@@ -194,7 +193,7 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
                         )
                         return selected_release or folder_release
                     case TrackNotInReleaseAction.SKIP:
-                        proc.stats.files_skipped += 1
+                        proc.stats.skipped_files.append(af)
                         return folder_release
                     case TrackNotInReleaseAction.QUIT:
                         sys.exit(0)

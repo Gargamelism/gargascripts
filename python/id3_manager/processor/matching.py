@@ -72,7 +72,7 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                     proposed, Path(af.file_path).name
                 )
                 if proposed is None:
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                     return None
                 af.proposed_tags = proposed
                 return None
@@ -100,10 +100,10 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                         proc.prompts.print(f"  {discogs_url}")
                     else:
                         proc.prompts.print("  Could not fetch release.")
-                        proc.stats.files_skipped += 1
+                        proc.stats.skipped_files.append(af)
                         return None
                 else:
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                     return None
             case NoDiscogsMatchAction.MANUAL:
                 manual_tags = proc.prompts.get_manual_metadata()
@@ -111,7 +111,7 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                     af.proposed_tags = manual_tags
                 return None
             case NoDiscogsMatchAction.SKIP:
-                proc.stats.files_skipped += 1
+                proc.stats.skipped_files.append(af)
                 return None
             case NoDiscogsMatchAction.QUIT:
                 sys.exit(0)
@@ -140,7 +140,7 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                     proposed, Path(af.file_path).name
                 )
                 if proposed is None:
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                     return None
                 af.proposed_tags = proposed
                 return None
@@ -180,10 +180,10 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                 if manual_tags:
                     af.proposed_tags = manual_tags
                 else:
-                    proc.stats.files_skipped += 1
+                    proc.stats.skipped_files.append(af)
                 return None
             case NoDiscogsMatchAction.SKIP:
-                proc.stats.files_skipped += 1
+                proc.stats.skipped_files.append(af)
                 return None
             case NoDiscogsMatchAction.QUIT:
                 sys.exit(0)
@@ -194,7 +194,7 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
     selected = proc.prompts.show_discogs_candidates(display_releases)
 
     if selected is None:
-        proc.stats.files_skipped += 1
+        proc.stats.skipped_files.append(af)
         return None
 
     if selected == "manual_url":
@@ -211,10 +211,10 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                 )
             else:
                 proc.prompts.print("  Could not fetch release.")
-                proc.stats.files_skipped += 1
+                proc.stats.skipped_files.append(af)
                 return None
         else:
-            proc.stats.files_skipped += 1
+            proc.stats.skipped_files.append(af)
             return None
     else:
         release, track = matchable_releases[selected]
@@ -239,7 +239,7 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
     proposed = proc.prompts.prompt_missing_fields(proposed, filename)
 
     if proposed is None:
-        proc.stats.files_skipped += 1
+        proc.stats.skipped_files.append(af)
         return None
 
     if proc.args.force and af.current_tags.is_complete():
