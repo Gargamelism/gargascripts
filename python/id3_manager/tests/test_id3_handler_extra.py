@@ -70,11 +70,9 @@ def make_flac(path: Path, metadata: TrackMetadata = None):
     """Create a minimal valid FLAC file."""
     from mutagen.flac import FLAC
 
-    # Use mutagen to create a minimal FLAC from scratch
-    # Minimum: FLAC marker + STREAMINFO block
-    # Build via mutagen by creating empty FLAC
     try:
-        audio = FLAC()
+        _write_minimal_flac(path)
+        audio = FLAC(str(path))
         if metadata:
             if metadata.title:
                 audio["title"] = metadata.title
@@ -92,9 +90,8 @@ def make_flac(path: Path, metadata: TrackMetadata = None):
                     audio["totaldiscs"] = str(metadata.total_discs)
             if metadata.year:
                 audio["date"] = str(metadata.year)
-        audio.save(str(path))
+        audio.save()
     except Exception:
-        # Fallback: write raw FLAC header bytes
         _write_minimal_flac(path)
 
 
