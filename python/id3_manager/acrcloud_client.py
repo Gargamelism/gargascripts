@@ -3,14 +3,14 @@
 import base64
 import hashlib
 import hmac
+import tempfile
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
-import numpy as np
 import requests
-from pedalboard.io import AudioFile
 
+from audio_handler import AudioHandler
 from config import eprint
 from models import ACRCloudResult
 
@@ -18,7 +18,13 @@ from models import ACRCloudResult
 class ACRCloudClient:
     """Client for ACRCloud audio fingerprinting service."""
 
-    def __init__(self, host: str, access_key: str, access_secret: str):
+    def __init__(
+        self,
+        host: str,
+        access_key: str,
+        access_secret: str,
+        audio_handler: AudioHandler,
+    ):
         """
         Initialize ACRCloud client.
 
@@ -27,54 +33,15 @@ class ACRCloudClient:
             access_key: ACRCloud access key
             access_secret: ACRCloud access secret
         """
-        self.host = host
-        self.access_key = access_key
-        self.access_secret = access_secret
-        self.timeout = 15
+        self._host = host
+        self._access_key = access_key
+        self._access_secret = access_secret
+        self._timeout = 15
+        self._audio_handler = audio_handler
 
-    def _extract_audio_segment(self, audio_path: str, start_sec: float,
-                               duration_sec: float) -> Tuple[np.ndarray, int]:
-        """
-        Extract a segment from an audio file.
-
-        Args:
-            audio_path: Path to audio file
-            start_sec: Start position in seconds
-            duration_sec: Duration to extract in seconds
-
-        Returns:
-            (audio_data, sample_rate) tuple
-        """
-        with AudioFile(audio_path) as f:
-            sample_rate = f.samplerate
-            start_frame = int(start_sec * sample_rate)
-            num_frames = int(duration_sec * sample_rate)
-
-            # Seek to start position
-            f.seek(start_frame)
-
-            # Read the segment
-            audio_data = f.read(num_frames)
-
-        return audio_data, sample_rate
-
-    def _export_to_mp3(self, audio_data: np.ndarray, sample_rate: int,
-                       output_path: str) -> None:
-        """
-        Export audio data to MP3 file.
-
-        Args:
-            audio_data: NumPy array of audio samples
-            sample_rate: Sample rate in Hz
-            output_path: Output file path
-        """
-        num_channels = audio_data.shape[0] if audio_data.ndim > 1 else 1
-        with AudioFile(output_path, "w", samplerate=sample_rate,
-                       num_channels=num_channels, quality=128) as f:
-            f.write(audio_data)
-
-    def recognize(self, audio_path: str,
-                  duration_seconds: int = 15) -> Optional[ACRCloudResult]:
+    def recognize(
+        self, audio_path: str, duration_seconds: int = 15
+    ) -> Optional[ACRCloudResult]:
         """
         Recognize audio file using ACRCloud.
 
@@ -88,8 +55,7 @@ class ACRCloudClient:
             ACRCloudResult if match found, None otherwise
         """
         try:
-            with AudioFile(audio_path) as f:
-                duration_sec = f.duration
+            duration_sec = self._audio_handler.get_audio_duration(audio_path)
         except Exception as e:
             eprint(f"Error loading audio file {audio_path}: {e}")
             return None
@@ -102,22 +68,23 @@ class ACRCloudClient:
             middle_start_sec = 0
 
         # Extract segment
-        audio_data, sr = self._extract_audio_segment(
+        audio_data, sr = self._audio_handler.extract_audio_segment(
             audio_path, middle_start_sec, duration_seconds
         )
 
         # Create temporary file for API
-        snippet_path = Path(audio_path).with_suffix(".acr_snippet.mp3")
+        snippet_path = tempfile.NamedTemporaryFile(
+            suffix=".wav", delete=False, delete_on_close=False
+        ).name
         try:
-            self._export_to_mp3(audio_data, sr, str(snippet_path))
-            result = self._call_api(str(snippet_path))
+            self._audio_handler.export_audio_segment(audio_data, sr, snippet_path)
+            result = self._call_api(snippet_path)
             return self._parse_response(result)
         except Exception as e:
             eprint(f"ACRCloud recognition error: {e}")
             return None
         finally:
-            if snippet_path.exists():
-                snippet_path.unlink()
+            Path(snippet_path).unlink(missing_ok=True)
 
     def _call_api(self, file_path: str) -> dict:
         """
@@ -135,32 +102,36 @@ class ACRCloudClient:
         signature_version = "1"
         timestamp = str(int(time.time()))
 
-        string_to_sign = "\n".join([
-            http_method, http_uri, self.access_key,
-            data_type, signature_version, timestamp
-        ])
+        string_to_sign = "\n".join(
+            [
+                http_method,
+                http_uri,
+                self._access_key,
+                data_type,
+                signature_version,
+                timestamp,
+            ]
+        )
 
         sign = base64.b64encode(
             hmac.new(
-                self.access_secret.encode("utf-8"),
+                self._access_secret.encode("utf-8"),
                 string_to_sign.encode("utf-8"),
-                digestmod=hashlib.sha1
+                digestmod=hashlib.sha1,
             ).digest()
         ).decode("utf-8")
 
         with open(file_path, "rb") as f:
             files = {
                 "sample": f,
-                "access_key": (None, self.access_key),
+                "access_key": (None, self._access_key),
                 "data_type": (None, data_type),
                 "signature_version": (None, signature_version),
                 "signature": (None, sign),
                 "timestamp": (None, timestamp),
             }
             resp = requests.post(
-                f"https://{self.host}/v1/identify",
-                files=files,
-                timeout=self.timeout
+                f"https://{self._host}/v1/identify", files=files, timeout=self._timeout
             )
             resp.raise_for_status()
             return resp.json()
@@ -192,11 +163,12 @@ class ACRCloudClient:
             album=best_match.get("album", {}).get("name"),
             release_date=best_match.get("release_date"),
             label=best_match.get("label"),
-            confidence=best_match.get("score", 0) / 100
+            confidence=best_match.get("score", 0) / 100,
         )
 
-    def recognize_with_retry(self, audio_path: str,
-                             max_retries: int = 2) -> Optional[ACRCloudResult]:
+    def recognize_with_retry(
+        self, audio_path: str, max_retries: int = 2
+    ) -> Optional[ACRCloudResult]:
         """
         Recognize audio with retry logic for transient failures.
 
@@ -215,16 +187,18 @@ class ACRCloudClient:
 
                 # If no match, try different segment positions
                 if attempt < max_retries:
-                    eprint(f"No match, trying different segment (attempt {attempt + 2})...")
-                    result = self._recognize_alternate_segment(
-                        audio_path, attempt + 1
+                    eprint(
+                        f"No match, trying different segment (attempt {attempt + 2})..."
                     )
+                    result = self._recognize_alternate_segment(audio_path, attempt + 1)
                     if result:
                         return result
 
             except requests.exceptions.Timeout:
                 if attempt < max_retries:
-                    eprint(f"Request timeout, retrying ({attempt + 2}/{max_retries + 1})...")
+                    eprint(
+                        f"Request timeout, retrying ({attempt + 2}/{max_retries + 1})..."
+                    )
                     time.sleep(2)
                 else:
                     eprint("ACRCloud request timed out after retries")
@@ -241,8 +215,9 @@ class ACRCloudClient:
 
         return None
 
-    def _recognize_alternate_segment(self, audio_path: str,
-                                     attempt: int) -> Optional[ACRCloudResult]:
+    def _recognize_alternate_segment(
+        self, audio_path: str, attempt: int
+    ) -> Optional[ACRCloudResult]:
         """
         Try recognizing with a different segment of the audio.
 
@@ -254,8 +229,7 @@ class ACRCloudClient:
             ACRCloudResult if match found, None otherwise
         """
         try:
-            with AudioFile(audio_path) as f:
-                duration_sec = f.duration
+            duration_sec = self._audio_handler.get_audio_duration(audio_path)
         except Exception:
             return None
 
@@ -263,28 +237,28 @@ class ACRCloudClient:
 
         # Try different positions based on attempt
         positions_sec = [
-            0,                      # Start
-            duration_sec / 4,       # 25%
-            duration_sec * 3 / 4,   # 75%
+            0,  # Start
+            duration_sec / 4,  # 25%
+            duration_sec * 3 / 4,  # 75%
         ]
 
         if attempt < len(positions_sec):
             start_sec = positions_sec[attempt]
 
-            audio_data, sr = self._extract_audio_segment(
+            audio_data, sr = self._audio_handler.extract_audio_segment(
                 audio_path, start_sec, duration_extract
             )
 
-            snippet_path = Path(audio_path).with_suffix(f".acr_alt_{attempt}.mp3")
-
+            snippet_path = tempfile.NamedTemporaryFile(
+                suffix=".wav", delete=False, delete_on_close=False
+            ).name
             try:
-                self._export_to_mp3(audio_data, sr, str(snippet_path))
-                result = self._call_api(str(snippet_path))
+                self._audio_handler.export_audio_segment(audio_data, sr, snippet_path)
+                result = self._call_api(snippet_path)
                 return self._parse_response(result)
             except Exception:
                 return None
             finally:
-                if snippet_path.exists():
-                    snippet_path.unlink()
+                Path(snippet_path).unlink(missing_ok=True)
 
         return None

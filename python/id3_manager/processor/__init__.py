@@ -5,6 +5,7 @@ import unicodedata
 from pathlib import Path
 from typing import List, Optional
 
+from audio_handler import PythonSoundFileHandler
 from models import (
     AudioFile,
     TrackMetadata,
@@ -50,6 +51,7 @@ class ID3Processor:
                 config["acrcloud_host"],
                 config["acrcloud_access_key"],
                 config["acrcloud_access_secret"],
+                PythonSoundFileHandler(),
             )
 
         self.discogs_client = None

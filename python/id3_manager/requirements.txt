@@ -4,7 +4,7 @@
 mutagen>=1.47.0
 
 # Audio processing
-pedalboard>=0.9.19
+soundfile>=0.14.0
 
 # HTTP requests (Discogs API)
 requests>=2.32.0
