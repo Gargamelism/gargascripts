@@ -38,7 +38,8 @@ def _release_data(tracks=None):
         "title": "Test Album",
         "artists": [{"name": "Test Artist"}],
         "year": 2020,
-        "tracklist": tracks or [
+        "tracklist": tracks
+        or [
             {"type_": "track", "position": "1", "title": "Track One"},
             {"type_": "track", "position": "2", "title": "Track Two"},
         ],
@@ -51,11 +52,16 @@ def _release_data(tracks=None):
 # _respect_rate_limit
 # ---------------------------------------------------------------------------
 
+
 class TestRespectRateLimit:
     def test_sleeps_when_too_soon(self, client):
         client._last_request_time = time.time()  # just now
-        with patch("discogs_client.time.sleep") as mock_sleep, \
-             patch("discogs_client.time.time", return_value=client._last_request_time + 0.3):
+        with (
+            patch("discogs_client.time.sleep") as mock_sleep,
+            patch(
+                "discogs_client.time.time", return_value=client._last_request_time + 0.3
+            ),
+        ):
             client._respect_rate_limit()
         mock_sleep.assert_called_once()
         args = mock_sleep.call_args[0][0]
@@ -80,6 +86,7 @@ class TestRespectRateLimit:
 # _update_rate_limit
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateRateLimit:
     def test_updates_remaining(self, client):
         resp = _make_resp({}, headers={"X-Discogs-Ratelimit-Remaining": "42"})
@@ -102,20 +109,25 @@ class TestUpdateRateLimit:
 # search
 # ---------------------------------------------------------------------------
 
+
 class TestSearch:
     def test_returns_results(self, client):
         resp = _make_resp({"results": [{"id": 1}, {"id": 2}]})
         client.session.get.return_value = resp
-        with patch.object(client, "_respect_rate_limit"), \
-             patch.object(client, "_update_rate_limit"):
+        with (
+            patch.object(client, "_respect_rate_limit"),
+            patch.object(client, "_update_rate_limit"),
+        ):
             results = client.search("Artist", album="Album")
         assert len(results) == 2
 
     def test_includes_track_param(self, client):
         resp = _make_resp({"results": []})
         client.session.get.return_value = resp
-        with patch.object(client, "_respect_rate_limit"), \
-             patch.object(client, "_update_rate_limit"):
+        with (
+            patch.object(client, "_respect_rate_limit"),
+            patch.object(client, "_update_rate_limit"),
+        ):
             client.search("Artist", track="Song")
         params = client.session.get.call_args[1]["params"]
         assert "track" in params
@@ -131,12 +143,15 @@ class TestSearch:
 # get_release
 # ---------------------------------------------------------------------------
 
+
 class TestGetRelease:
     def test_returns_release_on_success(self, client):
         resp = _make_resp(_release_data())
         client.session.get.return_value = resp
-        with patch.object(client, "_respect_rate_limit"), \
-             patch.object(client, "_update_rate_limit"):
+        with (
+            patch.object(client, "_respect_rate_limit"),
+            patch.object(client, "_update_rate_limit"),
+        ):
             release = client.get_release(123)
         assert release is not None
         assert release.title == "Test Album"
@@ -146,8 +161,10 @@ class TestGetRelease:
         http_err = requests.exceptions.HTTPError(response=resp)
         resp.raise_for_status.side_effect = http_err
         client.session.get.return_value = resp
-        with patch.object(client, "_respect_rate_limit"), \
-             patch.object(client, "_update_rate_limit"):
+        with (
+            patch.object(client, "_respect_rate_limit"),
+            patch.object(client, "_update_rate_limit"),
+        ):
             result = client.get_release(999)
         assert result is None
 
@@ -156,8 +173,10 @@ class TestGetRelease:
         http_err = requests.exceptions.HTTPError(response=MagicMock(status_code=500))
         resp.raise_for_status.side_effect = http_err
         client.session.get.return_value = resp
-        with patch.object(client, "_respect_rate_limit"), \
-             patch.object(client, "_update_rate_limit"):
+        with (
+            patch.object(client, "_respect_rate_limit"),
+            patch.object(client, "_update_rate_limit"),
+        ):
             result = client.get_release(1)
         assert result is None
 
@@ -172,23 +191,28 @@ class TestGetRelease:
 # _parse_release — vinyl and multi-disc
 # ---------------------------------------------------------------------------
 
+
 class TestParseRelease:
     def test_parses_non_vinyl_simple(self, client):
-        data = _release_data([
-            {"type_": "track", "position": "1", "title": "One"},
-            {"type_": "track", "position": "2", "title": "Two"},
-        ])
+        data = _release_data(
+            [
+                {"type_": "track", "position": "1", "title": "One"},
+                {"type_": "track", "position": "2", "title": "Two"},
+            ]
+        )
         release = parse_release(data)
         assert len(release.tracklist) == 2
         assert release.tracklist[0].track_number == 1
         assert release.tracklist[1].track_number == 2
 
     def test_parses_vinyl_positions(self, client):
-        data = _release_data([
-            {"type_": "track", "position": "A1", "title": "Side A Track 1"},
-            {"type_": "track", "position": "A2", "title": "Side A Track 2"},
-            {"type_": "track", "position": "B1", "title": "Side B Track 1"},
-        ])
+        data = _release_data(
+            [
+                {"type_": "track", "position": "A1", "title": "Side A Track 1"},
+                {"type_": "track", "position": "A2", "title": "Side A Track 2"},
+                {"type_": "track", "position": "B1", "title": "Side B Track 1"},
+            ]
+        )
         release = parse_release(data)
         assert len(release.tracklist) == 3
         # All on disc 1 (sides A and B)
@@ -198,22 +222,26 @@ class TestParseRelease:
         assert track_nums == [1, 2, 3]
 
     def test_parses_vinyl_multi_disc(self, client):
-        data = _release_data([
-            {"type_": "track", "position": "A1", "title": "A1"},
-            {"type_": "track", "position": "B1", "title": "B1"},
-            {"type_": "track", "position": "C1", "title": "C1"},  # disc 2
-            {"type_": "track", "position": "D1", "title": "D1"},  # disc 2
-        ])
+        data = _release_data(
+            [
+                {"type_": "track", "position": "A1", "title": "A1"},
+                {"type_": "track", "position": "B1", "title": "B1"},
+                {"type_": "track", "position": "C1", "title": "C1"},  # disc 2
+                {"type_": "track", "position": "D1", "title": "D1"},  # disc 2
+            ]
+        )
         release = parse_release(data)
         discs = {t.disc_number for t in release.tracklist}
         assert 1 in discs
         assert 2 in discs
 
     def test_skips_non_track_types(self, client):
-        data = _release_data([
-            {"type_": "heading", "position": "", "title": "Side A"},
-            {"type_": "track", "position": "1", "title": "Real Track"},
-        ])
+        data = _release_data(
+            [
+                {"type_": "heading", "position": "", "title": "Side A"},
+                {"type_": "track", "position": "1", "title": "Real Track"},
+            ]
+        )
         release = parse_release(data)
         assert len(release.tracklist) == 1
 
@@ -230,19 +258,23 @@ class TestParseRelease:
         assert release.artists == ["Artist"]
 
     def test_mixed_vinyl_and_non_vinyl(self, client):
-        data = _release_data([
-            {"type_": "track", "position": "A1", "title": "Vinyl"},
-            {"type_": "track", "position": "5", "title": "NonVinyl"},
-        ])
+        data = _release_data(
+            [
+                {"type_": "track", "position": "A1", "title": "Vinyl"},
+                {"type_": "track", "position": "5", "title": "NonVinyl"},
+            ]
+        )
         release = parse_release(data)
         assert len(release.tracklist) == 2
 
     def test_disc_track_format(self, client):
-        data = _release_data([
-            {"type_": "track", "position": "1-1", "title": "D1T1"},
-            {"type_": "track", "position": "1-2", "title": "D1T2"},
-            {"type_": "track", "position": "2-1", "title": "D2T1"},
-        ])
+        data = _release_data(
+            [
+                {"type_": "track", "position": "1-1", "title": "D1T1"},
+                {"type_": "track", "position": "1-2", "title": "D1T2"},
+                {"type_": "track", "position": "2-1", "title": "D2T1"},
+            ]
+        )
         release = parse_release(data)
         assert release.total_discs == 2
         assert release.tracklist[2].disc_number == 2
@@ -251,6 +283,7 @@ class TestParseRelease:
 # ---------------------------------------------------------------------------
 # _parse_position
 # ---------------------------------------------------------------------------
+
 
 class TestParsePosition:
     def test_simple_number(self):
@@ -278,19 +311,28 @@ class TestParsePosition:
 # find_best_release
 # ---------------------------------------------------------------------------
 
+
 class TestFindBestRelease:
-    def _mock_release(self, n_tracks=3):
-        tracks = [DiscogsTrack(position=str(i), title=f"T{i}", track_number=i, disc_number=1)
-                  for i in range(1, n_tracks + 1)]
+    def _mock_release(self, n_tracks=3, release_id=1):
+        tracks = [
+            DiscogsTrack(position=str(i), title=f"T{i}", track_number=i, disc_number=1)
+            for i in range(1, n_tracks + 1)
+        ]
         return DiscogsRelease(
-            release_id=1, title="Album", artists=["Artist"],
-            year=2020, tracklist=tracks, total_discs=1,
+            release_id=release_id,
+            title="Album",
+            artists=["Artist"],
+            year=2020,
+            tracklist=tracks,
+            total_discs=1,
         )
 
     def test_searches_with_album(self, client):
         release = self._mock_release()
-        with patch.object(client, "search", return_value=[{"id": 1}]) as mock_search, \
-             patch.object(client, "get_release", return_value=release):
+        with (
+            patch.object(client, "search", return_value=[{"id": 1}]) as mock_search,
+            patch.object(client, "get_release", return_value=release),
+        ):
             client.find_best_release("Artist", album="Album")
         mock_search.assert_called_with("Artist", album="Album")
 
@@ -304,8 +346,10 @@ class TestFindBestRelease:
                 return []  # album search → empty
             return [{"id": 1}]
 
-        with patch.object(client, "search", side_effect=fake_search), \
-             patch.object(client, "get_release", return_value=release):
+        with (
+            patch.object(client, "search", side_effect=fake_search),
+            patch.object(client, "get_release", return_value=release),
+        ):
             results = client.find_best_release("Artist", album="Album", track="Song")
         assert len(results) > 0
 
@@ -317,8 +361,10 @@ class TestFindBestRelease:
                 return [{"id": 1}]
             return []
 
-        with patch.object(client, "search", side_effect=fake_search), \
-             patch.object(client, "get_release", return_value=release):
+        with (
+            patch.object(client, "search", side_effect=fake_search),
+            patch.object(client, "get_release", return_value=release),
+        ):
             results = client.find_best_release("Artist")
         assert len(results) > 0
 
@@ -329,35 +375,78 @@ class TestFindBestRelease:
 
     def test_skips_releases_without_tracklist(self, client):
         empty_release = DiscogsRelease(
-            release_id=1, title="Album", artists=["Artist"],
-            year=2020, tracklist=[], total_discs=1,
+            release_id=1,
+            title="Album",
+            artists=["Artist"],
+            year=2020,
+            tracklist=[],
+            total_discs=1,
         )
-        with patch.object(client, "search", return_value=[{"id": 1}]), \
-             patch.object(client, "get_release", return_value=empty_release):
+        with (
+            patch.object(client, "search", return_value=[{"id": 1}]),
+            patch.object(client, "get_release", return_value=empty_release),
+        ):
             results = client.find_best_release("Artist")
         assert results == []
 
     def test_sorts_by_track_count(self, client):
-        r_short = self._mock_release(n_tracks=2)
-        r_long = self._mock_release(n_tracks=10)
+        r_short = self._mock_release(n_tracks=2, release_id=1)
+        r_long = self._mock_release(n_tracks=10, release_id=2)
         results_list = [r_short, r_long]
-        with patch.object(client, "search", return_value=[{"id": 1}, {"id": 2}]), \
-             patch.object(client, "get_release", side_effect=results_list):
+        with (
+            patch.object(client, "search", return_value=[{"id": 1}, {"id": 2}]),
+            patch.object(client, "get_release", side_effect=results_list),
+        ):
             results = client.find_best_release("Artist")
         assert results[0].tracklist == r_long.tracklist
+
+    def test_resolves_to_master_when_track_present(self, client):
+        master = self._mock_release(n_tracks=3, release_id=99)
+        master.is_master = True
+        with (
+            patch.object(client, "search", return_value=[{"id": 1, "master_id": 99}]),
+            patch.object(client, "get_master", return_value=master) as mock_master,
+            patch.object(client, "get_release") as mock_release,
+        ):
+            results = client.find_best_release("Artist", track="T1")
+        mock_master.assert_called_once_with(99)
+        mock_release.assert_not_called()
+        assert results[0].is_master is True
+
+    def test_falls_back_to_release_when_track_absent_from_master(self, client):
+        master = self._mock_release(n_tracks=3, release_id=99)
+        master.is_master = True
+        release = self._mock_release(n_tracks=12, release_id=1)
+        with (
+            patch.object(client, "search", return_value=[{"id": 1, "master_id": 99}]),
+            patch.object(client, "get_master", return_value=master),
+            patch.object(client, "get_release", return_value=release) as mock_release,
+        ):
+            results = client.find_best_release("Artist", track="Bonus Track")
+        mock_release.assert_called_once_with(1)
+        assert results[0].is_master is False
 
 
 # ---------------------------------------------------------------------------
 # match_track_to_release — exact / substring / threshold / none
 # ---------------------------------------------------------------------------
 
+
 class TestMatchTrackToRelease:
     def _release_with(self, *titles):
-        tracks = [DiscogsTrack(position=str(i+1), title=t, track_number=i+1, disc_number=1)
-                  for i, t in enumerate(titles)]
+        tracks = [
+            DiscogsTrack(
+                position=str(i + 1), title=t, track_number=i + 1, disc_number=1
+            )
+            for i, t in enumerate(titles)
+        ]
         return DiscogsRelease(
-            release_id=1, title="A", artists=["A"],
-            year=2020, tracklist=tracks, total_discs=1,
+            release_id=1,
+            title="A",
+            artists=["A"],
+            year=2020,
+            tracklist=tracks,
+            total_discs=1,
         )
 
     def test_exact_match(self, client):
@@ -383,8 +472,12 @@ class TestMatchTrackToRelease:
 
     def test_returns_none_on_empty_tracklist(self, client):
         release = DiscogsRelease(
-            release_id=1, title="A", artists=["A"],
-            year=2020, tracklist=[], total_discs=1,
+            release_id=1,
+            title="A",
+            artists=["A"],
+            year=2020,
+            tracklist=[],
+            total_discs=1,
         )
         result = client.match_track_to_release(release, "Any Song")
         assert result is None

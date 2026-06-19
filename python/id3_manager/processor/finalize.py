@@ -12,6 +12,7 @@ from id3_handler import ID3Handler
 
 def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
     write_failed = False
+    tagged_now: List[AudioFile] = []
     for af in audio_files:
         if af.proposed_tags:
             if proc.args.dry_run:
@@ -30,15 +31,16 @@ def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
                     break
                 if success:
                     proc.prompts.print(f"  Updated: {Path(af.file_path).name}")
-                    proc.stats.tagged_files.append(af)
+                    proc.stats.tags_updated += 1
+                    tagged_now.append(af)
                 else:
                     proc.stats.errors.append(f"Failed to write tags: {af.file_path}")
 
     if not write_failed and not proc.args.no_file_rename:
         proc._handle_file_renames(audio_files)
 
-    if proc.stats.tagged_files and not proc.args.dry_run:
-        proc._push_tag_writes_to_onedrive(proc.stats.tagged_files)
+    if tagged_now and not proc.args.dry_run:
+        proc._push_tag_writes_to_onedrive(tagged_now)
 
 
 def push_tag_writes_to_onedrive(proc, files: List[AudioFile]) -> None:

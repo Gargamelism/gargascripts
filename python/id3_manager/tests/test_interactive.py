@@ -156,28 +156,29 @@ class TestAutoYesBehavior:
 class TestGetDiscogsUrlOrId:
     """Tests for get_discogs_url_or_id method."""
 
-    def test_parses_full_url(self, prompts):
-        """Should extract release ID from full URL."""
+    def test_parses_release_url(self, prompts):
+        """Should extract (is_master, id) from a release URL."""
         with patch(
             "builtins.input",
             return_value="https://www.discogs.com/release/12345-Artist-Album",
         ):
             result = prompts.get_discogs_url_or_id()
-            assert result == 12345
+            assert result == (False, 12345)
 
-    def test_parses_short_url(self, prompts):
-        """Should extract release ID from short URL."""
+    def test_parses_master_url(self, prompts):
+        """Should extract (is_master, id) from a master URL."""
         with patch(
-            "builtins.input", return_value="https://www.discogs.com/release/12345"
+            "builtins.input",
+            return_value="https://www.discogs.com/master/12345-Artist-Album",
         ):
             result = prompts.get_discogs_url_or_id()
-            assert result == 12345
+            assert result == (True, 12345)
 
-    def test_parses_just_id(self, prompts):
-        """Should extract release ID when just number is provided."""
+    def test_bare_id_is_rejected(self, prompts):
+        """A bare number is no longer accepted — a typed URL is required."""
         with patch("builtins.input", return_value="12345"):
             result = prompts.get_discogs_url_or_id()
-            assert result == 12345
+            assert result is None
 
     def test_returns_none_for_empty_input(self, prompts):
         """Should return None for empty input."""
@@ -250,7 +251,7 @@ class TestShowSummary:
         """Should display all processing statistics."""
         stats = ProcessingStats()
         stats.total_files = 10
-        stats.tagged_files = [object()] * 5
+        stats.tags_updated = 5
         stats.skipped_files = [object(), object()]  # files_skipped = len(skipped_files)
         stats.acr_lookups = 8
         stats.discogs_lookups = 6

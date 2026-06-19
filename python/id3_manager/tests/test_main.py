@@ -727,6 +727,7 @@ class TestSearchAndMatchDiscogs:
             side_effect=[None, None, manual_release.tracklist[0]]
         )
         processor.discogs_client.get_release = Mock(return_value=manual_release)
+        processor.discogs_client.get_entity = Mock(return_value=manual_release)
 
         # First: retry (fails), Second: manual_url
         mock_prompts.handle_no_discogs_match = Mock(
@@ -735,7 +736,7 @@ class TestSearchAndMatchDiscogs:
         mock_prompts.get_modified_search_query = Mock(
             return_value=("Test Artist", "Test Song")
         )
-        mock_prompts.get_discogs_url_or_id = Mock(return_value=789)
+        mock_prompts.get_discogs_url_or_id = Mock(return_value=(False, 789))
         mock_prompts.show_discogs_candidates = Mock(return_value=0)
 
         af = AudioFile(
@@ -759,7 +760,7 @@ class TestSearchAndMatchDiscogs:
         assert mock_prompts.handle_no_discogs_match.call_count == 2
 
         # Should have fetched the manual release
-        processor.discogs_client.get_release.assert_called_once_with(789)
+        processor.discogs_client.get_entity.assert_called_once_with(789, False)
 
         # Should return the manually fetched release
         assert result == manual_release

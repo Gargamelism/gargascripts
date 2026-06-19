@@ -85,19 +85,17 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                 )
                 proc.stats.discogs_lookups += 1
             case NoDiscogsMatchAction.MANUAL_URL:
-                release_id = proc.prompts.get_discogs_url_or_id()
-                if release_id:
-                    release = proc.discogs_client.get_release(release_id)
+                parsed = proc.prompts.get_discogs_url_or_id()
+                if parsed:
+                    is_master, entity_id = parsed
+                    release = proc.discogs_client.get_entity(entity_id, is_master)
                     proc.stats.discogs_lookups += 1
                     if release:
                         releases = [release]
-                        discogs_url = (
-                            f"https://www.discogs.com/release/{release.release_id}"
-                        )
                         proc.prompts.print(
                             f"  Fetched: {release.title} ({release.year})"
                         )
-                        proc.prompts.print(f"  {discogs_url}")
+                        proc.prompts.print(f"  {release.discogs_url}")
                     else:
                         proc.prompts.print("  Could not fetch release.")
                         proc.stats.skipped_files.append(af)
@@ -145,9 +143,10 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
                 af.proposed_tags = proposed
                 return None
             case NoDiscogsMatchAction.MANUAL_URL:
-                release_id = proc.prompts.get_discogs_url_or_id()
-                if release_id:
-                    release = proc.discogs_client.get_release(release_id)
+                parsed = proc.prompts.get_discogs_url_or_id()
+                if parsed:
+                    is_master, entity_id = parsed
+                    release = proc.discogs_client.get_entity(entity_id, is_master)
                     proc.stats.discogs_lookups += 1
                     if release:
                         track = proc.discogs_client.match_track_to_release(
@@ -198,14 +197,14 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
         return None
 
     if selected == "manual_url":
-        release_id = proc.prompts.get_discogs_url_or_id()
-        if release_id:
-            release = proc.discogs_client.get_release(release_id)
+        parsed = proc.prompts.get_discogs_url_or_id()
+        if parsed:
+            is_master, entity_id = parsed
+            release = proc.discogs_client.get_entity(entity_id, is_master)
             proc.stats.discogs_lookups += 1
             if release:
-                discogs_url = f"https://www.discogs.com/release/{release.release_id}"
                 proc.prompts.print(f"  Fetched: {release.title} ({release.year})")
-                proc.prompts.print(f"  {discogs_url}")
+                proc.prompts.print(f"  {release.discogs_url}")
                 track = proc.discogs_client.match_track_to_release(
                     release, acr_result.title
                 )

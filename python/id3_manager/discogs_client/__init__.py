@@ -16,7 +16,6 @@ _RE_LEADING_TRACKNUM = re.compile(r"^\d+[\.\-\s]+")
 _RE_TRAILING_PAREN = re.compile(r"\s*\([^)]*\)\s*$")
 
 
-
 class DiscogsClient:
     """Client for Discogs API."""
 
@@ -26,10 +25,12 @@ class DiscogsClient:
     def __init__(self, user_token: str):
         self.user_token = user_token
         self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"Discogs token={user_token}",
-            "User-Agent": self.USER_AGENT,
-        })
+        self.session.headers.update(
+            {
+                "Authorization": f"Discogs token={user_token}",
+                "User-Agent": self.USER_AGENT,
+            }
+        )
         self.rate_limit_remaining = 60
         self._last_request_time = 0
 
@@ -49,8 +50,9 @@ class DiscogsClient:
             self.rate_limit_remaining = int(remaining)
         self._last_request_time = time.time()
 
-    def search(self, artist: str, album: Optional[str] = None,
-               track: Optional[str] = None) -> List[dict]:
+    def search(
+        self, artist: str, album: Optional[str] = None, track: Optional[str] = None
+    ) -> List[dict]:
         self._respect_rate_limit()
 
         params = {
@@ -64,9 +66,7 @@ class DiscogsClient:
 
         try:
             resp = self.session.get(
-                f"{self.BASE_URL}/database/search",
-                params=params,
-                timeout=15
+                f"{self.BASE_URL}/database/search", params=params, timeout=15
             )
             resp.raise_for_status()
             self._update_rate_limit(resp)
@@ -80,8 +80,7 @@ class DiscogsClient:
 
         try:
             resp = self.session.get(
-                f"{self.BASE_URL}/releases/{release_id}",
-                timeout=15
+                f"{self.BASE_URL}/releases/{release_id}", timeout=15
             )
             resp.raise_for_status()
             self._update_rate_limit(resp)
@@ -100,9 +99,40 @@ class DiscogsClient:
             eprint(f"Discogs release fetch error: {e}")
             return None
 
-    def find_best_release(self, artist: str, album: Optional[str] = None,
-                          track: Optional[str] = None,
-                          max_results: int = 5) -> List[DiscogsRelease]:
+    def get_master(self, master_id: int) -> Optional[DiscogsRelease]:
+        self._respect_rate_limit()
+
+        try:
+            resp = self.session.get(f"{self.BASE_URL}/masters/{master_id}", timeout=15)
+            resp.raise_for_status()
+            self._update_rate_limit(resp)
+            return _parsing.parse_release(resp.json(), is_master=True)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                eprint(
+                    f"Discogs master {master_id} not fetchable (404) — "
+                    f"likely deleted/withdrawn or still in moderation. Skipping."
+                )
+                return None
+            eprint(f"Discogs master fetch error: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            eprint(f"Discogs master fetch error: {e}")
+            return None
+
+    def get_entity(self, entity_id: int, is_master: bool) -> Optional[DiscogsRelease]:
+        """Fetch a Discogs master or specific release by id."""
+        if is_master:
+            return self.get_master(entity_id)
+        return self.get_release(entity_id)
+
+    def find_best_release(
+        self,
+        artist: str,
+        album: Optional[str] = None,
+        track: Optional[str] = None,
+        max_results: int = 5,
+    ) -> List[DiscogsRelease]:
         results = []
         if album:
             results = self.search(artist, album=album)
@@ -117,16 +147,31 @@ class DiscogsClient:
             return []
 
         candidates = []
+        seen = set()
         for result in results[:max_results]:
-            release = self.get_release(result["id"])
-            if release and release.tracklist:
-                candidates.append(release)
+            master_id = result.get("master_id")
+            entity = None
+            if master_id:
+                master = self.get_master(master_id)
+                # Use the master only if it actually contains the track (or there's
+                # no track to check) — bonus tracks live only on the specific release.
+                if master and (not track or self.match_track_to_release(master, track)):
+                    entity = master
+            if entity is None:
+                entity = self.get_release(result["id"])
+
+            if entity and entity.tracklist:
+                key = (entity.is_master, entity.release_id)
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(entity)
 
         candidates.sort(key=lambda r: len(r.tracklist), reverse=True)
         return candidates
 
-    def match_track_to_release(self, release: DiscogsRelease,
-                               track_title: str) -> Optional[DiscogsTrack]:
+    def match_track_to_release(
+        self, release: DiscogsRelease, track_title: str
+    ) -> Optional[DiscogsTrack]:
         title_lower = track_title.lower().strip()
         clean_title = _RE_LEADING_TRACKNUM.sub("", title_lower)
         clean_title = _RE_TRAILING_PAREN.sub("", clean_title)
@@ -150,4 +195,3 @@ class DiscogsClient:
             return best_match
 
         return None
-

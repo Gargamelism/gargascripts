@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from models import (
     ACRCloudResult,
@@ -13,30 +13,36 @@ from models import (
 )
 
 
-def get_discogs_url_or_id(ui) -> Optional[int]:
-    print(f"\n{ui._c('cyan', 'Enter Discogs release URL or ID:')}")
-    print(f"  Examples:")
-    print(f"    https://www.discogs.com/release/12345-Artist-Album")
-    print(f"    https://www.discogs.com/release/12345")
-    print(f"    12345")
+def get_discogs_url_or_id(ui) -> Optional[Tuple[bool, int]]:
+    """Prompt for a Discogs URL and return (is_master, id), or None.
+
+    The URL path selects the entity type: /master/ID or /release/ID.
+    """
+    print(f"\n{ui._c('cyan', 'Enter Discogs master or release URL:')}")
+    print("  Examples:")
+    print("    https://www.discogs.com/master/12345-Artist-Album")
+    print("    https://www.discogs.com/release/12345-Artist-Album")
     print()
 
-    value = input(f"  {ui._c('bold', 'URL or ID:')} ").strip()
+    value = input(f"  {ui._c('bold', 'URL:')} ").strip()
     if not value:
         return None
 
-    for pattern in [r"/release/(\d+)", r"^(\d+)$"]:
-        match = re.search(pattern, value)
-        if match:
-            return int(match.group(1))
+    master_match = re.search(r"/master/(\d+)", value)
+    if master_match:
+        return True, int(master_match.group(1))
 
-    print(ui._c("red", "Could not parse release ID from input."))
+    release_match = re.search(r"/release/(\d+)", value)
+    if release_match:
+        return False, int(release_match.group(1))
+
+    print(ui._c("red", "Could not parse a master or release URL from input."))
     return None
 
 
 def handle_no_acr_match(ui, file_path: str) -> NoACRMatchAction:
     filename = Path(file_path).name
-    print(f"\n{ui._c('yellow', f'No ACRCloud match for:')} {filename}")
+    print(f"\n{ui._c('yellow', 'No ACRCloud match for:')} {filename}")
     print()
     print("  [1] Enter artist/title manually")
     print("  [2] Use existing partial tags for Discogs search")
@@ -141,14 +147,14 @@ def prompt_missing_fields(
             return metadata
 
         if ui.auto_yes:
-            print(f"\n{ui._c('yellow', f'Missing required fields for:')} {filename}")
+            print(f"\n{ui._c('yellow', 'Missing required fields for:')} {filename}")
             print(f"  Missing: {', '.join(missing)}")
             print(
                 f"  {ui._c('red', '[AUTO] Cannot proceed - missing required fields. Skipping.')}"
             )
             return None
 
-        print(f"\n{ui._c('yellow', f'Missing required fields for:')} {filename}")
+        print(f"\n{ui._c('yellow', 'Missing required fields for:')} {filename}")
         print(f"  Missing: {', '.join(missing)}")
         print()
         print("  [1] Enter missing values")
@@ -161,19 +167,19 @@ def prompt_missing_fields(
         print(f"\n{ui._c('cyan', 'Enter missing values:')}")
 
         if "title" in missing:
-            value = input(f"  Title: ").strip()
+            value = input("  Title: ").strip()
             if value:
                 metadata.title = value
         if "artist" in missing:
-            value = input(f"  Artist: ").strip()
+            value = input("  Artist: ").strip()
             if value:
                 metadata.artist = value
         if "album" in missing:
-            value = input(f"  Album: ").strip()
+            value = input("  Album: ").strip()
             if value:
                 metadata.album = value
         if "track_number" in missing:
-            value = input(f"  Track #: ").strip()
+            value = input("  Track #: ").strip()
             if value:
                 try:
                     metadata.track_number = int(value)
@@ -191,7 +197,7 @@ def get_modified_search_query(ui, default_artist: str, default_track: str) -> tu
 def handle_track_not_in_release(
     ui, filename: str, release_title: str
 ) -> TrackNotInReleaseAction:
-    print(f"\n{ui._c('yellow', f'Track not found in release:')} {filename}")
+    print(f"\n{ui._c('yellow', 'Track not found in release:')} {filename}")
     print(f"  Release: {release_title}")
     print()
     print("  [1] Search Discogs for this file")

@@ -52,8 +52,8 @@ def parse_position(position: str) -> tuple:
     return None, None
 
 
-def parse_release(data: dict) -> DiscogsRelease:
-    """Parse Discogs API response dict into a DiscogsRelease."""
+def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
+    """Parse a Discogs release or master API response dict into a DiscogsRelease."""
     raw_tracks = []
     has_vinyl_positions = False
 
@@ -150,4 +150,5 @@ def parse_release(data: dict) -> DiscogsRelease:
         total_discs=total_discs,
         genres=data.get("genres", []),
         label=label,
+        is_master=is_master,
     )

@@ -156,6 +156,13 @@ class DiscogsRelease:
     total_discs: int = 1
     genres: List[str] = field(default_factory=list)
     label: Optional[str] = None
+    is_master: bool = False
+
+    @property
+    def discogs_url(self) -> str:
+        """Public Discogs URL for this entity (master or specific release)."""
+        kind = "master" if self.is_master else "release"
+        return f"https://www.discogs.com/{kind}/{self.release_id}"
 
     def find_track(self, title: str, artist: str = None) -> Optional[DiscogsTrack]:
         """Find a track in the tracklist by title (fuzzy match)."""
@@ -241,19 +248,15 @@ class ProcessingStats:
     total_files: int = 0
     acr_lookups: int = 0
     discogs_lookups: int = 0
+    tags_updated: int = 0
     errors: List[str] = field(default_factory=list)
     malformed_files: List[str] = field(default_factory=list)
     skipped_files: List["AudioFile"] = field(default_factory=list)
-    tagged_files: List["AudioFile"] = field(default_factory=list)
     renamed_folders: List[str] = field(default_factory=list)
 
     @property
     def files_skipped(self) -> int:
         return len(self.skipped_files)
-
-    @property
-    def tags_updated(self) -> int:
-        return len(self.tagged_files)
 
     @property
     def folders_renamed(self) -> int:

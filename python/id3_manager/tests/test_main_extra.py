@@ -852,9 +852,9 @@ class TestSearchAndMatchDiscogsEarlyExit:
         p = _proc(config, args, prompts)
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[])
-        p.discogs_client.get_release = Mock(return_value=None)
+        p.discogs_client.get_entity = Mock(return_value=None)
         prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL_URL
-        prompts.get_discogs_url_or_id.return_value = 999
+        prompts.get_discogs_url_or_id.return_value = (False, 999)
         acr = Mock(title="Song", artists=["Artist"], album="Album")
         result = p._search_and_match_discogs(_af(), acr)
         assert result is None
@@ -907,9 +907,9 @@ class TestSearchAndMatchDiscogsManualUrl:
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[release])
         p.discogs_client.match_track_to_release = Mock(return_value=track)
-        p.discogs_client.get_release = Mock(return_value=release)
+        p.discogs_client.get_entity = Mock(return_value=release)
         prompts.show_discogs_candidates.return_value = "manual_url"
-        prompts.get_discogs_url_or_id.return_value = 1
+        prompts.get_discogs_url_or_id.return_value = (False, 1)
         prompts.prompt_missing_fields.side_effect = lambda m, f: m
 
         af = _af()
