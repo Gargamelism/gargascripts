@@ -5,6 +5,7 @@ mutagen>=1.47.0
 
 # Audio processing
 soundfile>=0.14.0
+librosa>=0.11.0
 
 # HTTP requests (Discogs API)
 requests>=2.32.0
