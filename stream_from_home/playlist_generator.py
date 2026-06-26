@@ -9,9 +9,9 @@ from typing import List, Optional, Tuple, Dict
 
 
 @dataclass
-class FolderInfo:
-    immediate_subfolders: List[str]  # Only direct subfolders
-    all_subfolders: List[str]  # All subfolders recursively
+class BandInfo:
+    band: str
+    albums: List[str]
 
 
 @dataclass
@@ -20,11 +20,10 @@ class SpecialBandsConfig:
     pending_bands: List[str] = None
 
 
-def scan_subfolders(base_folder: str) -> FolderInfo:
+def scan_subfolders(base_folder: str) -> list[BandInfo]:
     """Scan and return both immediate and recursive subfolders from the base folder."""
-    immediate_subfolders = []
-    all_subfolders = []
     folders_to_scan = [base_folder]
+    by_band = {}
 
     try:
         while folders_to_scan:
@@ -33,38 +32,49 @@ def scan_subfolders(base_folder: str) -> FolderInfo:
                 for entry in entries:
                     if entry.is_dir():
                         subfolder_path = entry.path
-                        immediate_subfolders.append(subfolder_path)
-                        all_subfolders.append(subfolder_path)
-                        folders_to_scan.append(subfolder_path)
+
+                        if (
+                            current_folder != base_folder
+                            and current_folder != subfolder_path
+                        ):
+                            by_band.setdefault(current_folder, []).append(
+                                subfolder_path
+                            )
+
+                        # scan immediate subfolders only for the base folder
+                        if current_folder not in by_band:
+                            folders_to_scan.append(subfolder_path)
 
     except (FileNotFoundError, PermissionError):
         print(f"Access denied or folder not found: {base_folder}")
     except Exception as e:
         print(f"Error accessing {base_folder}: {e}")
 
-    return FolderInfo(immediate_subfolders, all_subfolders)
+    final_folders: list[BandInfo] = [
+        BandInfo(band=os.path.basename(band), albums=albums)
+        for band, albums in by_band.items()
+    ]
+
+    return final_folders
 
 
 @lru_cache(maxsize=1)
-def get_folder_info(base_folder: str) -> FolderInfo:
+def get_folder_info(base_folder: str) -> list[BandInfo]:
     """Get all subfolders recursively from the base folder."""
     return scan_subfolders(base_folder)
 
 
-def get_random_subfolder(base_folder: str, recursive: bool = True) -> Optional[str]:
+def get_random_subfolder(base_folder: str) -> str:
     """
     Get a random subfolder from the base folder.
     Always includes all nested subfolders in the selection pool.
 
     Args:
         base_folder: The folder to get a subfolder from
-        recursive: Parameter kept for compatibility, but defaults to True
     """
-    folder_info = get_folder_info(base_folder)
-    subfolders = (
-        folder_info.all_subfolders if recursive else folder_info.immediate_subfolders
-    )
-    return random.choice(subfolders) if subfolders else None
+    bands = get_folder_info(base_folder)
+    band = random.choice(bands)
+    return random.choice(band.albums)
 
 
 def validate_folder(folder_path: str) -> Optional[str]:
@@ -80,45 +90,22 @@ def validate_folder(folder_path: str) -> Optional[str]:
     return folder_path
 
 
-def get_albums(base_folder: str, number_of_albums: int) -> List[str]:
-    """Get the specified number of albums from the base folder."""
+def get_albums(bands_info: List[BandInfo], number_of_albums: int) -> List[str]:
+    """Get the specified number of albums from the bands info."""
     playlist_paths = []
-    print("\nScanning folders recursively...")
     while len(playlist_paths) < number_of_albums:
-        current_folder = get_random_subfolder(
-            base_folder
-        )  # recursive is True by default
+        band = random.choice(bands_info)
+        user_response = input(
+            f"\nAdd an album from band '{band.band}'? (y/n): "
+        ).lower()
+        if user_response != "y":
+            continue
 
-        if not current_folder:
-            print("No more subfolders available.")
-            break
-
-        print(f"\nFound folder: {current_folder}")
-        user_response = input("Add this folder to playlist? (y/n): ").lower()
-
-        if user_response == "y":
-            playlist_paths.append(current_folder)
-            print(f"Added! ({len(playlist_paths)}/{number_of_albums})")
+        album = random.choice(band.albums)
+        playlist_paths.append(album)
+        print(f"Added album: {album}")
 
     return playlist_paths
-
-
-def get_additional_band_album(band_name: str, folder_info: FolderInfo) -> Optional[str]:
-    """Try to get an album from the predefined list of preferred bands."""
-    band_folder = next(
-        (
-            folder
-            for folder in folder_info.all_subfolders
-            if os.path.basename(folder) == band_name
-        ),
-        None,
-    )
-
-    if not band_folder:
-        print(f"Preferred band '{band_name}' not found in the music collection.")
-        return None
-
-    return get_random_subfolder(band_folder)
 
 
 def get_server_prefix() -> str:
@@ -235,7 +222,9 @@ def save_playlist(playlist_content: List[str], output_path: str) -> None:
     try:
         with open(output_path, "w", encoding="utf-8") as file:
             file.write("\n".join(playlist_items))
-        print(f"\nPlaylist saved successfully to: {output_path} containing {len(playlist_items)} tracks.")
+        print(
+            f"\nPlaylist saved successfully to: {output_path} containing {len(playlist_items)} tracks."
+        )
     except IOError as e:
         print(f"Error saving playlist: {e}")
 
@@ -318,7 +307,7 @@ def get_album_tracks(playlist_paths) -> List[str]:
                 for file_name in music_files:
                     full = os.path.abspath(os.path.join(root, file_name))
                     found_files.append(full)
-        else: 
+        else:
             print(f"Skipping missing or unsupported path: {path}")
 
     return found_files
@@ -342,21 +331,24 @@ def generate_playlist() -> None:
         with open(args.special_bands, "r") as f:
             special_bands = SpecialBandsConfig(**json.load(f))
 
-    # Get main albums
-    playlist_paths = get_albums(music_base, args.number)
+    bands_info = get_folder_info(music_base)
+    print(f"\nFound {len(bands_info)} bands in the music collection.")
 
-    # add preferred album if preferred base is provided
+    playlist_paths = get_albums(bands_info, args.number)
+
     if special_bands and special_bands.preferred_bands:
-        preferred_band = random.choice(special_bands.preferred_bands)
-        preferred_album = get_additional_band_album(preferred_band, folder_info=get_folder_info(music_base))
-        if preferred_album:
-            playlist_paths.append(preferred_album)
+        preferred_bands = [band for band in bands_info if band.band in special_bands.preferred_bands]
+        preferred_band = random.choice(preferred_bands)
+        preferred_album = random.choice(preferred_band.albums)
+        playlist_paths.append(preferred_album)
+        print(f"Added preferred album: {preferred_album}")
 
     if special_bands and special_bands.pending_bands:
-        pending_band = random.choice(special_bands.pending_bands)
-        pending_album = get_additional_band_album(pending_band, folder_info=get_folder_info(music_base))
-        if pending_album:
-            playlist_paths.append(pending_album)
+        pending_bands = [band for band in bands_info if band.band in special_bands.pending_bands]
+        pending_band = random.choice(pending_bands)
+        pending_album = random.choice(pending_band.albums)
+        playlist_paths.append(pending_album)
+        print(f"Added pending album: {pending_album}")
 
     # Try to add a preferred band album
     playlist_tracks = get_album_tracks(playlist_paths)
