@@ -6,6 +6,7 @@ import hmac
 import tempfile
 import time
 from pathlib import Path
+from pprint import pprint
 from typing import Optional
 
 import requests
@@ -148,7 +149,7 @@ class ACRCloudClient:
         """
         status = data.get("status", {})
         if status.get("code") != 0:
-            # No match or error
+            print(f"ACRCloud API error: {status.get('msg')}")
             return None
 
         music = data.get("metadata", {}).get("music", [])
