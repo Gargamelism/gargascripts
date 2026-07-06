@@ -200,6 +200,20 @@ class InteractivePrompts:
             default=False,
         )
 
+    def confirm_sync_pending(self, pending_folders: list) -> bool:
+        if self.auto_yes:
+            return True
+        print(
+            f"\n{self._c('cyan', f'OneDrive sync pending for {len(pending_folders)} folder(s):')}"
+        )
+        for folder in pending_folders:
+            print(f"  {folder}")
+        return self._prompt_choice(
+            "Sync to OneDrive now? [y/N]:",
+            {"y": True, "yes": True, "n": False, "no": False},
+            default=False,
+        )
+
     # --- Display shims ---
     def show_file_comparison(self, audio_file: AudioFile) -> None:
         return _display.show_file_comparison(self, audio_file)

@@ -3,17 +3,18 @@
 import base64
 import hashlib
 import hmac
+import logging
 import tempfile
 import time
 from pathlib import Path
-from pprint import pprint
 from typing import Optional
 
 import requests
 
 from audio_handler import AudioHandler
-from config import eprint
 from models import ACRCloudResult
+
+logger = logging.getLogger(__name__)
 
 
 class ACRCloudClient:
@@ -58,7 +59,7 @@ class ACRCloudClient:
         try:
             duration_sec = self._audio_handler.get_audio_duration(audio_path)
         except Exception as e:
-            eprint(f"Error loading audio file {audio_path}: {e}")
+            logger.error(f"Error loading audio file {audio_path}: {e}")
             return None
 
         # Calculate middle segment position
@@ -82,7 +83,7 @@ class ACRCloudClient:
             result = self._call_api(snippet_path)
             return self._parse_response(result)
         except Exception as e:
-            eprint(f"ACRCloud recognition error: {e}")
+            logger.error(f"ACRCloud recognition error: {e}")
             return None
         finally:
             Path(snippet_path).unlink(missing_ok=True)
@@ -188,7 +189,7 @@ class ACRCloudClient:
 
                 # If no match, try different segment positions
                 if attempt < max_retries:
-                    eprint(
+                    logger.info(
                         f"No match, trying different segment (attempt {attempt + 2})..."
                     )
                     result = self._recognize_alternate_segment(audio_path, attempt + 1)
@@ -197,19 +198,19 @@ class ACRCloudClient:
 
             except requests.exceptions.Timeout:
                 if attempt < max_retries:
-                    eprint(
+                    logger.warning(
                         f"Request timeout, retrying ({attempt + 2}/{max_retries + 1})..."
                     )
                     time.sleep(2)
                 else:
-                    eprint("ACRCloud request timed out after retries")
+                    logger.error("ACRCloud request timed out after retries")
 
             except requests.exceptions.RequestException as e:
                 if "429" in str(e) or "rate" in str(e).lower():
-                    eprint("Rate limit hit, waiting 60 seconds...")
+                    logger.warning("Rate limit hit, waiting 60 seconds...")
                     time.sleep(60)
                 elif attempt < max_retries:
-                    eprint(f"Request error, retrying: {e}")
+                    logger.warning(f"Request error, retrying: {e}")
                     time.sleep(2)
                 else:
                     raise

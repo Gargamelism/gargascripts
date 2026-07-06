@@ -1,27 +1,30 @@
 """Backup-aware tag writer for ID3Handler."""
 
+import logging
 from pathlib import Path
 
-from config import eprint
+logger = logging.getLogger(__name__)
 
 
 class SafeWriter:
     """Writes tags with in-memory backup and restore on failure."""
 
-    def write(self, handler, file_path: str, metadata, preserve_existing: bool = True) -> bool:
+    def write(
+        self, handler, file_path: str, metadata, preserve_existing: bool = True
+    ) -> bool:
         path = Path(file_path)
         ext = path.suffix.lower()
 
         try:
             handler.read_tags(file_path)
         except Exception as e:
-            eprint(f"Skipping unreadable file (won't write): {path.name} - {e}")
+            logger.warning(f"Skipping unreadable file (won't write): {path.name} - {e}")
             return False
 
         try:
             original_bytes = path.read_bytes()
         except OSError as e:
-            eprint(f"Cannot read file for backup: {path.name} - {e}")
+            logger.warning(f"Cannot read file for backup: {path.name} - {e}")
             return False
 
         try:

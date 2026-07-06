@@ -90,19 +90,39 @@ def validate_folder(folder_path: str) -> Optional[str]:
     return folder_path
 
 
-def get_albums(bands_info: List[BandInfo], number_of_albums: int) -> List[str]:
+def get_main_albums(bands_info: List[BandInfo], number_of_albums: int) -> List[str]:
     """Get the specified number of albums from the bands info."""
+    added_bands = set()
     playlist_paths = []
     while len(playlist_paths) < number_of_albums:
-        band = random.choice(bands_info)
+        band_info = random.choice(bands_info)
+
+        if band_info.band in added_bands:
+            continue
+
         user_response = input(
-            f"\nAdd an album from band '{band.band}'? (y/n): "
+            f"\nAdd an album from band '{band_info.band}'? (y/n): "
         ).lower()
         if user_response != "y":
             continue
+        
+        chose_album = False
+        while not chose_album:
+            album = random.choice(band_info.albums)
+            choice = input(
+                f"Selected album: '{album}'. Do you want to add this album? (y/n/s): "
+            ).lower()
 
-        album = random.choice(band.albums)
-        playlist_paths.append(album)
+            match choice:
+                case "y":
+                    chose_album = True
+                    playlist_paths.append(album)
+                    added_bands.add(band_info.band)
+                case "n":
+                    break
+                case "s":
+                    continue
+
         print(f"Added album: {album}")
 
     return playlist_paths
@@ -334,7 +354,7 @@ def generate_playlist() -> None:
     bands_info = get_folder_info(music_base)
     print(f"\nFound {len(bands_info)} bands in the music collection.")
 
-    playlist_paths = get_albums(bands_info, args.number)
+    playlist_paths = get_main_albums(bands_info, args.number)
 
     if special_bands and special_bands.preferred_bands:
         preferred_bands = [band for band in bands_info if band.band in special_bands.preferred_bands]

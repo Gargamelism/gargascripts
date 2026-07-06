@@ -98,20 +98,15 @@ def normalize_disc_folder_name(
             success=False, message=f"Target folder already exists: {new_path}"
         )
 
-    mirror = renamer.mirror_rename(current, new_path, dry_run, allow_recovery=False)
-    if not mirror.success:
-        return CommitResult(
-            success=False, message=f"Remote rename failed: {mirror.message}"
-        )
-
     if dry_run:
         return CommitResult(
             success=True, message=f"Would rename '{current.name}' to '{expected_name}'"
         )
 
-    return renamer.commit_with_rollback(
-        current, new_path, lambda: current.rename(new_path), mirror_result=mirror
-    )
+    result = renamer.commit(new_path, lambda: current.rename(new_path))
+    if result.success:
+        renamer.queue_sync(current.parent)
+    return result
 
 
 def create_multi_disc_structure(
@@ -150,21 +145,10 @@ def move_file_to_disc_folder(
     if target.exists():
         return CommitResult(success=False, message=f"Target already exists: {target}")
 
-    mirror = renamer.mirror_rename(source, target, dry_run=dry_run)
-    if not mirror.success:
-        return CommitResult(
-            success=False, message=f"Remote move failed: {mirror.message}"
-        )
-
     if dry_run:
         return CommitResult(success=True, message=f"Would move to: {target}")
 
-    return renamer.commit_with_rollback(
-        source,
-        target,
-        lambda: shutil.move(str(source), str(target)),
-        mirror_result=mirror,
-    )
+    return renamer.commit(target, lambda: shutil.move(str(source), str(target)))
 
 
 def reorganize_multi_disc_album(
@@ -220,5 +204,7 @@ def reorganize_multi_disc_album(
             old_folder.rmdir()
     except Exception:
         pass
+
+    organizer.queue_sync(Path(folder_path).parent)
 
     return True, str(new_base)

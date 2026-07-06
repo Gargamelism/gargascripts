@@ -500,6 +500,24 @@ class TestConfirmFolderRenameInput:
             assert result is False
 
 
+class TestConfirmSyncPending:
+    """Tests for confirm_sync_pending."""
+
+    def test_auto_yes_skips_prompt(self, prompts_auto_yes):
+        result = prompts_auto_yes.confirm_sync_pending([Path("/music/album")])
+        assert result is True
+
+    def test_accepts_yes(self, prompts):
+        with patch("builtins.input", return_value="yes"):
+            result = prompts.confirm_sync_pending([Path("/music/album")])
+        assert result is True
+
+    def test_default_is_no(self, prompts):
+        with patch("builtins.input", return_value=""):
+            result = prompts.confirm_sync_pending([Path("/music/album")])
+        assert result is False
+
+
 class TestGetModifiedSearchQuery:
     """Tests for get_modified_search_query method."""
 

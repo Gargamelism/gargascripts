@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from folder_manager import FolderManager
 from models import AudioFile, TrackMetadata
-from sync_results import CommitResult, MoveResult
+from sync_results import CommitResult
 
 
 @pytest.fixture
@@ -21,7 +21,6 @@ def fm():
 @pytest.fixture
 def fm_sync():
     mock_sync = MagicMock()
-    mock_sync.moveto.return_value = MoveResult(True, "ok", "moveto")
     mock_sync.log = MagicMock()
     return FolderManager(onedrive_sync=mock_sync)
 
@@ -42,98 +41,47 @@ def _af(disc=1, title="Song", path="/fake/song.mp3"):
 
 
 # ---------------------------------------------------------------------------
-# mirror_rename
+# queue_sync
 # ---------------------------------------------------------------------------
 
 
-class TestMirrorRename:
+class TestQueueSync:
     def test_no_op_when_no_sync(self, fm, tmp_path):
-        src = tmp_path / "a.mp3"
-        dst = tmp_path / "b.mp3"
-        result = fm.mirror_rename(src, dst, dry_run=False)
-        assert result.success is True
-        assert result.mode == "skipped"
+        fm.queue_sync(tmp_path)
+        assert fm.pending_sync == []
 
-    def test_delegates_to_onedrive_sync(self, fm_sync, tmp_path):
-        src = tmp_path / "a.mp3"
-        dst = tmp_path / "b.mp3"
-        fm_sync.mirror_rename(src, dst, dry_run=False)
-        fm_sync.onedrive_sync.moveto.assert_called_once()
+    def test_adds_folder_when_sync_enabled(self, fm_sync, tmp_path):
+        fm_sync.queue_sync(tmp_path)
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
+
+    def test_dedupes_repeated_folder(self, fm_sync, tmp_path):
+        fm_sync.queue_sync(tmp_path)
+        fm_sync.queue_sync(tmp_path)
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
 
 
 # ---------------------------------------------------------------------------
-# commit_with_rollback
+# commit
 # ---------------------------------------------------------------------------
 
 
-class TestCommitWithRollback:
+class TestCommit:
     def test_success(self, fm, tmp_path):
-        src = tmp_path / "a.mp3"
         dst = tmp_path / "b.mp3"
         called = []
-        result = fm.commit_with_rollback(
-            src,
-            dst,
-            lambda: called.append(True),
-            mirror_result=MoveResult(True, "", "moveto"),
-        )
+        result = fm.commit(dst, lambda: called.append(True))
         assert result.success is True
         assert called == [True]
 
-    def test_local_failure_triggers_rollback(self, fm_sync, tmp_path):
-        src = tmp_path / "a.mp3"
-        dst = tmp_path / "b.mp3"
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(
-            True, "rolled back", "moveto"
-        )
-
-        def fail():
-            raise OSError("rename failed")
-
-        result = fm_sync.commit_with_rollback(
-            src,
-            dst,
-            fail,
-            mirror_result=MoveResult(True, "", "moveto"),
-        )
-        assert result.success is False
-        # Rollback moveto called: dst->src
-        fm_sync.onedrive_sync.moveto.assert_called()
-
-    def test_local_failure_no_rollback_when_recovered(self, fm_sync, tmp_path):
-        src = tmp_path / "a.mp3"
+    def test_failure_returns_error_message(self, fm, tmp_path):
         dst = tmp_path / "b.mp3"
 
         def fail():
             raise OSError("rename failed")
 
-        result = fm_sync.commit_with_rollback(
-            src,
-            dst,
-            fail,
-            mirror_result=MoveResult(True, "", "recovered"),
-        )
+        result = fm.commit(dst, fail)
         assert result.success is False
-        assert "recovered" in result.message
-
-    def test_rollback_failure_propagates_error(self, fm_sync, tmp_path):
-        src = tmp_path / "a.mp3"
-        dst = tmp_path / "b.mp3"
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(
-            False, "rollback failed", "failed"
-        )
-
-        def fail():
-            raise OSError("local error")
-
-        result = fm_sync.commit_with_rollback(
-            src,
-            dst,
-            fail,
-            mirror_result=MoveResult(True, "", "moveto"),
-        )
-        assert result.success is False
-        assert "rollback failed" in result.message
+        assert "rename failed" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +183,12 @@ class TestNormalizeDiscFolderName:
         assert result.success is False
         assert "already exists" in result.message
 
-    def test_fails_when_remote_fails(self, fm_sync, tmp_path):
+    def test_queues_sync_on_success(self, fm_sync, tmp_path):
         folder = tmp_path / "Disc 1"
         folder.mkdir()
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(False, "err", "failed")
         result = fm_sync.normalize_disc_folder_name(str(folder), 1)
-        assert result.success is False
+        assert result.success is True
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
 
 
 # ---------------------------------------------------------------------------
@@ -314,14 +262,15 @@ class TestMoveFileToDiscFolder:
         assert result.success is True
         assert src.exists()
 
-    def test_fails_when_remote_fails(self, fm_sync, tmp_path):
+    def test_does_not_queue_sync_directly(self, fm_sync, tmp_path):
+        """Queuing for a disc move happens once at the reorganize level, not per-file."""
         src = tmp_path / "song.mp3"
         src.touch()
         disc = tmp_path / "CD1"
         disc.mkdir()
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(False, "err", "failed")
         result = fm_sync.move_file_to_disc_folder(str(src), str(disc))
-        assert result.success is False
+        assert result.success is True
+        assert fm_sync.pending_sync == []
 
 
 # ---------------------------------------------------------------------------
@@ -438,9 +387,9 @@ class TestRenameAudioFile:
         assert result.success is True
         assert (tmp_path / "new.mp3").exists()
 
-    def test_fails_when_remote_fails(self, fm_sync, tmp_path):
+    def test_queues_sync_on_success(self, fm_sync, tmp_path):
         f = tmp_path / "song.mp3"
         f.touch()
-        fm_sync.onedrive_sync.moveto.return_value = MoveResult(False, "err", "failed")
         result = fm_sync.rename_audio_file(str(f), "new.mp3")
-        assert result.success is False
+        assert result.success is True
+        assert fm_sync.pending_sync == [tmp_path.resolve()]

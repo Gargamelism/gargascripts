@@ -7,38 +7,31 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import eprint, load_config, validate_config, get_discogs_token_instructions, get_acrcloud_instructions
-
-
-class TestEprint:
-    def test_writes_to_stderr(self, capsys):
-        eprint("hello stderr")
-        err = capsys.readouterr().err
-        assert "hello stderr" in err
-
-    def test_does_not_write_to_stdout(self, capsys):
-        eprint("only stderr")
-        out, err = capsys.readouterr()
-        assert out == ""
-        assert "only stderr" in err
-
-    def test_forwards_kwargs(self, capsys):
-        eprint("a", "b", sep="-")
-        err = capsys.readouterr().err
-        assert "a-b" in err
+from config import (
+    load_config,
+    validate_config,
+    get_discogs_token_instructions,
+    get_acrcloud_instructions,
+)
 
 
 class TestLoadConfig:
     def test_returns_all_keys(self, tmp_path):
         env = tmp_path / ".env"
         env.write_text("")
-        with patch("config.load_dotenv"), \
-             patch.dict("os.environ", {
-                 "ACRCLOUD_HOST": "h",
-                 "ACRCLOUD_ACCESS_KEY": "k",
-                 "ACRCLOUD_ACCESS_SECRET": "s",
-                 "DISCOGS_USER_TOKEN": "t",
-             }, clear=True):
+        with (
+            patch("config.load_dotenv"),
+            patch.dict(
+                "os.environ",
+                {
+                    "ACRCLOUD_HOST": "h",
+                    "ACRCLOUD_ACCESS_KEY": "k",
+                    "ACRCLOUD_ACCESS_SECRET": "s",
+                    "DISCOGS_USER_TOKEN": "t",
+                },
+                clear=True,
+            ),
+        ):
             cfg = load_config(str(env))
         assert cfg["acrcloud_host"] == "h"
         assert cfg["acrcloud_access_key"] == "k"
@@ -48,32 +41,34 @@ class TestLoadConfig:
     def test_missing_env_vars_are_none(self, tmp_path):
         env = tmp_path / ".env"
         env.write_text("")
-        with patch("config.load_dotenv"), \
-             patch.dict("os.environ", {}, clear=True):
+        with patch("config.load_dotenv"), patch.dict("os.environ", {}, clear=True):
             cfg = load_config(str(env))
         assert cfg["acrcloud_host"] is None
         assert cfg["discogs_user_token"] is None
 
-    def test_warns_when_env_file_missing(self, tmp_path, capsys):
+    def test_warns_when_env_file_missing(self, tmp_path, caplog):
         missing = tmp_path / "nonexistent.env"
         with patch.dict("os.environ", {}, clear=True):
             load_config(str(missing))
-        err = capsys.readouterr().err
-        assert "Warning" in err or "not found" in err or "falling back" in err
+        assert "not found" in caplog.text or "falling back" in caplog.text
 
     def test_loads_dotenv_when_file_exists(self, tmp_path):
         env = tmp_path / ".env"
         env.write_text("DISCOGS_USER_TOKEN=mytoken\n")
-        with patch("config.load_dotenv") as mock_ld, \
-             patch.dict("os.environ", {"DISCOGS_USER_TOKEN": "mytoken"}, clear=True):
-            cfg = load_config(str(env))
+        with (
+            patch("config.load_dotenv") as mock_ld,
+            patch.dict("os.environ", {"DISCOGS_USER_TOKEN": "mytoken"}, clear=True),
+        ):
+            load_config(str(env))
         mock_ld.assert_called_once()
 
     def test_defaults_to_dot_env(self, tmp_path):
         # When env_file=None, it should default to ".env"
-        with patch("config.Path") as mock_path, \
-             patch("config.load_dotenv"), \
-             patch.dict("os.environ", {}, clear=True):
+        with (
+            patch("config.Path") as mock_path,
+            patch("config.load_dotenv"),
+            patch.dict("os.environ", {}, clear=True),
+        ):
             mock_instance = mock_path.return_value
             mock_instance.exists.return_value = False
             load_config()
@@ -125,10 +120,15 @@ class TestValidateConfig:
         assert "DISCOGS_USER_TOKEN" not in missing
 
     def test_all_missing(self):
-        cfg = {k: None for k in [
-            "acrcloud_host", "acrcloud_access_key",
-            "acrcloud_access_secret", "discogs_user_token",
-        ]}
+        cfg = {
+            k: None
+            for k in [
+                "acrcloud_host",
+                "acrcloud_access_key",
+                "acrcloud_access_secret",
+                "discogs_user_token",
+            ]
+        }
         missing = validate_config(cfg)
         assert len(missing) == 4
 

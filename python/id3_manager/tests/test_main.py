@@ -19,7 +19,7 @@ from models import (
     NoDiscogsMatchAction,
     TrackNotInReleaseAction,
 )
-from sync_results import CommitResult
+from sync_results import CommitResult, RcloneResult
 
 
 @pytest.fixture
@@ -1034,3 +1034,68 @@ class TestFilesOnlyNeedingRename:
 
         # Should have called rename
         processor.folder_manager.rename_audio_file.assert_called_once()
+
+
+class TestMaybeFlushPendingSync:
+    """Tests for _maybe_flush_pending_sync."""
+
+    def test_no_op_when_no_onedrive_sync(self, mock_config, mock_args, mock_prompts):
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager.onedrive_sync = None
+        processor.folder_manager.pending_sync = [Path("/music/album")]
+
+        processor._maybe_flush_pending_sync()  # should not raise
+        mock_prompts.confirm_sync_pending.assert_not_called()
+
+    def test_no_op_when_nothing_pending(self, mock_config, mock_args, mock_prompts):
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager.onedrive_sync = Mock()
+        processor.folder_manager.pending_sync = []
+
+        processor._maybe_flush_pending_sync()
+        mock_prompts.confirm_sync_pending.assert_not_called()
+
+    def test_declining_leaves_pending_list_intact(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        sync = Mock()
+        processor.folder_manager.onedrive_sync = sync
+        processor.folder_manager.pending_sync = [Path("/music/album")]
+        mock_prompts.confirm_sync_pending = Mock(return_value=False)
+
+        processor._maybe_flush_pending_sync()
+
+        sync.sync_folder.assert_not_called()
+        assert processor.folder_manager.pending_sync == [Path("/music/album")]
+
+    def test_confirming_syncs_and_clears_pending(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        sync = Mock()
+        sync.sync_folder = Mock(return_value=RcloneResult(True, "synced"))
+        processor.folder_manager.onedrive_sync = sync
+        processor.folder_manager.pending_sync = [
+            Path("/music/album1"),
+            Path("/music/album2"),
+        ]
+        mock_prompts.confirm_sync_pending = Mock(return_value=True)
+
+        processor._maybe_flush_pending_sync()
+
+        assert sync.sync_folder.call_count == 2
+        assert processor.folder_manager.pending_sync == []
+
+    def test_records_error_on_sync_failure(self, mock_config, mock_args, mock_prompts):
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        sync = Mock()
+        sync.sync_folder = Mock(return_value=RcloneResult(False, "boom"))
+        processor.folder_manager.onedrive_sync = sync
+        processor.folder_manager.pending_sync = [Path("/music/album")]
+        mock_prompts.confirm_sync_pending = Mock(return_value=True)
+
+        processor._maybe_flush_pending_sync()
+
+        assert len(processor.stats.errors) == 1
+        assert "boom" in processor.stats.errors[0]

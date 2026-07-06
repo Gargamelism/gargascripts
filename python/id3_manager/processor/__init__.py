@@ -1,5 +1,6 @@
 """ID3Processor — orchestrates tag management across files and folders."""
 
+import logging
 import sys
 import unicodedata
 from pathlib import Path
@@ -25,6 +26,9 @@ from discogs_client import DiscogsClient
 from . import dispatch as _dispatch
 from . import matching as _matching
 from . import finalize as _finalize
+from . import sync as _sync
+
+logger = logging.getLogger(__name__)
 
 
 class ID3Processor:
@@ -59,8 +63,6 @@ class ID3Processor:
             self.discogs_client = DiscogsClient(config["discogs_user_token"])
 
     def process(self, path: str) -> None:
-        from config import eprint
-
         path_obj = Path(path)
 
         if path_obj.is_file():
@@ -71,10 +73,11 @@ class ID3Processor:
             else:
                 self._process_folder(path)
         else:
-            eprint(f"Path not found: {path}")
+            logger.error(f"Path not found: {path}")
             sys.exit(1)
 
         self._review_skipped_files()
+        self._maybe_flush_pending_sync()
         self.prompts.show_summary(self.stats)
 
     def _filter_folders_from_start(
@@ -203,6 +206,11 @@ class ID3Processor:
         if not self.args.no_rename:
             self._handle_folder_rename(folder_path, audio_files)
 
+        self._maybe_flush_pending_sync()
+
+    def _maybe_flush_pending_sync(self) -> None:
+        return _sync.maybe_flush_pending_sync(self)
+
     def _process_disc(
         self, disc_folder: AlbumFolder, audio_files: List[AudioFile]
     ) -> None:
@@ -281,7 +289,7 @@ class ID3Processor:
         return _finalize.apply_tag_changes(self, audio_files)
 
     def _push_tag_writes_to_onedrive(self, files: List[AudioFile]) -> None:
-        return _finalize.push_tag_writes_to_onedrive(self, files)
+        return _sync.push_tag_writes_to_onedrive(self, files)
 
     def _detect_track_collisions(self, audio_files: List[AudioFile]) -> CollisionMap:
         return _finalize.detect_track_collisions(self, audio_files)

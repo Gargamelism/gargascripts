@@ -1,10 +1,12 @@
 """Configuration management for ID3 Manager."""
 
+import logging
 import os
-import sys
 from pathlib import Path
 from typing import List, Optional, Protocol, TypedDict
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 class AppConfig(TypedDict):
@@ -31,14 +33,10 @@ class AppArgs(Protocol):
     onedrive_root: Optional[str]
     onedrive_remote: str
     rclone_path: Optional[str]
+    sync_only: bool
     env_file: str
     no_color: bool
     quiet: bool
-
-
-def eprint(*args, **kwargs):
-    """Print to stderr."""
-    print(*args, file=sys.stderr, **kwargs)
 
 
 def load_config(env_file: Optional[str] = None) -> AppConfig:
@@ -57,9 +55,9 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
     env_path = Path(env_file)
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
-        eprint(f"Loaded environment from {env_path.resolve()}")
+        logger.info(f"Loaded environment from {env_path.resolve()}")
     else:
-        eprint(
+        logger.warning(
             f"Warning: .env file not found at {env_path.resolve()} "
             "- falling back to process env."
         )

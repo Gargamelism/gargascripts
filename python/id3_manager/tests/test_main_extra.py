@@ -9,6 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from folder_manager import FolderManager
 from main import ID3Processor, main
 from models import (
     AudioFile,
@@ -23,7 +24,7 @@ from models import (
     NoDiscogsMatchAction,
     TrackNotInReleaseAction,
 )
-from sync_results import CommitResult, MoveResult
+from sync_results import CommitResult, RcloneResult
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +397,7 @@ class TestProcessSingleFile:
         p = _proc(config, args, prompts)
         with patch("main.ID3Handler.is_supported", return_value=False):
             p._process_single_file("/f/file.xyz")
-        prompts.print.assert_not_called()  # eprint used, not prompts.print
+        prompts.print.assert_not_called()  # logger used, not prompts.print
 
     def test_has_changes_apply_writes_tags(self, config, args, prompts):
         p = _proc(config, args, prompts)
@@ -525,6 +526,7 @@ class TestProcessFolderMultiDisc:
 
         p = _proc(config, args, prompts)
         p.folder_manager = Mock()
+        p.folder_manager.onedrive_sync = None
         p.folder_manager.detect_multi_disc_structure = Mock(
             return_value=[
                 AlbumFolder(
@@ -1030,30 +1032,23 @@ class TestPushTagWritesToOneDrive:
         p.folder_manager.onedrive_sync = None
         p._push_tag_writes_to_onedrive([_af()])  # should not raise
 
-    def test_records_error_on_push_failure(self, config, args, prompts):
+    def test_queues_folder_when_sync_enabled(self, config, args, prompts):
         p = _proc(config, args, prompts)
         sync = Mock()
-        sync.copyto = Mock(return_value=MoveResult(False, "network error", "failed"))
-        p.folder_manager = Mock()
-        p.folder_manager.onedrive_sync = sync
+        p.folder_manager = FolderManager(onedrive_sync=sync)
+
+        p._push_tag_writes_to_onedrive([_af(path="/f/s.mp3")])
+
+        assert p.folder_manager.pending_sync == [Path("/f").resolve()]
+
+    def test_prints_nothing_immediately(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        sync = Mock()
+        p.folder_manager = FolderManager(onedrive_sync=sync)
 
         p._push_tag_writes_to_onedrive([_af()])
 
-        assert len(p.stats.errors) == 1
-        assert "network error" in p.stats.errors[0]
-
-    def test_prints_pushed_on_success(self, config, args, prompts):
-        p = _proc(config, args, prompts)
-        sync = Mock()
-        sync.copyto = Mock(return_value=MoveResult(True, "uploaded", "copyto"))
-        p.folder_manager = Mock()
-        p.folder_manager.onedrive_sync = sync
-
-        p._push_tag_writes_to_onedrive([_af()])
-
-        prompts.print.assert_called()
-        msg = prompts.print.call_args[0][0]
-        assert "Pushed" in msg
+        prompts.print.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1404,6 +1399,81 @@ class TestMainFunction:
         ):
             with pytest.raises(SystemExit):
                 main()
+
+    def test_sync_only_without_root_exits(self, tmp_path):
+        folder = tmp_path / "album"
+        folder.mkdir()
+        with patch("sys.argv", ["main.py", str(folder), "--sync-only"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_sync_only_nonexistent_root_exits(self, tmp_path):
+        folder = tmp_path / "album"
+        folder.mkdir()
+        with patch(
+            "sys.argv",
+            [
+                "main.py",
+                str(folder),
+                "--sync-only",
+                "--onedrive-root",
+                str(tmp_path / "nope"),
+            ],
+        ):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_sync_only_runs_sync_folder_and_exits(self, tmp_path):
+        folder = tmp_path / "album"
+        folder.mkdir()
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "main.py",
+                    str(folder),
+                    "--sync-only",
+                    "--onedrive-root",
+                    str(tmp_path),
+                ],
+            ),
+            patch("main.OneDriveSync") as MockSync,
+            patch("main.load_config") as mock_load_config,
+        ):
+            MockSync.return_value.sync_folder = Mock(
+                return_value=RcloneResult(True, "synced")
+            )
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+        MockSync.return_value.sync_folder.assert_called_once()
+        called_path = MockSync.return_value.sync_folder.call_args[0][0]
+        assert Path(called_path) == folder
+        mock_load_config.assert_not_called()
+
+    def test_sync_only_failure_exits_nonzero(self, tmp_path):
+        folder = tmp_path / "album"
+        folder.mkdir()
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "main.py",
+                    str(folder),
+                    "--sync-only",
+                    "--onedrive-root",
+                    str(tmp_path),
+                ],
+            ),
+            patch("main.OneDriveSync") as MockSync,
+        ):
+            MockSync.return_value.sync_folder = Mock(
+                return_value=RcloneResult(False, "rclone exit 1: boom")
+            )
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 1
 
     def test_keyboard_interrupt_exits(self, tmp_path):
         f = tmp_path / "song.mp3"

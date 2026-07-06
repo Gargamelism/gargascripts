@@ -1,5 +1,6 @@
 """ID3 tag handler using mutagen for cross-format support."""
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -8,7 +9,6 @@ from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.id3 import TIT2, TPE1, TALB, TPE2, TRCK, TPOS, TDRC, TCON
 
-from config import eprint
 from models import TrackMetadata
 from id3_handler.formats import (
     MP4_TAGS as _MP4_TAGS,
@@ -18,6 +18,8 @@ from id3_handler.formats import (
     get_mp4_tag as _get_mp4_tag,
 )
 from id3_handler.backup import SafeWriter
+
+logger = logging.getLogger(__name__)
 
 ID3_ENCODING_UTF8 = 3
 
@@ -53,7 +55,7 @@ class ID3Handler:
         elif ext == ".m4a":
             return self._read_m4a_tags(file_path)
         else:
-            eprint(f"Unsupported format: {ext}")
+            logger.warning(f"Unsupported format: {ext}")
             return TrackMetadata()
 
     def _read_mp3_tags(self, file_path: str) -> TrackMetadata:

@@ -10,8 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from onedrive_sync import OneDriveSync
-from sync_results import DivergenceConfirmation
+from onedrive_sync import OneDriveSync, _default_log
 
 
 @pytest.fixture
@@ -32,12 +31,17 @@ def sync(sync_root):
 
 
 @pytest.fixture
-def src_dst(sync_root):
-    """A created source file and a (not yet existing) destination in the sync root."""
-    src = sync_root / "old.mp3"
-    dst = sync_root / "new.mp3"
-    src.touch()
-    return src, dst
+def album_folder(sync_root):
+    """A created album folder inside the sync root."""
+    folder = sync_root / "Artist" / "Album"
+    folder.mkdir(parents=True)
+    return folder
+
+
+class TestDefaultLog:
+    def test_prints_message(self, capsys):
+        _default_log("hello")
+        assert "hello" in capsys.readouterr().out
 
 
 class TestSyncRoot:
@@ -77,76 +81,71 @@ class TestToRemote:
         assert remote == "onedrive:" + nfc_name + "/Song.mp3"
 
 
-class TestMoveto:
+class TestSyncFolder:
     def test_skips_when_outside_sync_root(self, sync, tmp_path):
-        outside = tmp_path / "elsewhere" / "a.mp3"
-        result = sync.moveto(outside, tmp_path / "elsewhere" / "b.mp3")
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        result = sync.sync_folder(outside)
         assert result.success is True
-        assert result.mode == "skipped"
         assert "outside sync root" in result.message
 
-    def test_skips_when_src_equals_dst(self, sync, sync_root):
-        p = sync_root / "a.mp3"
-        p.touch()
-        result = sync.moveto(p, p)
-        assert result.success is True
-        assert result.mode == "skipped"
-        assert "identical" in result.message
-
-    def test_runs_rclone_moveto_on_success(self, sync, src_dst):
-        src, dst = src_dst
+    def test_runs_rclone_sync_on_success(self, sync, album_folder):
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            result = sync.moveto(src, dst)
+            result = sync.sync_folder(album_folder)
         assert result.success is True
-        assert result.mode == "moveto"
         assert run.call_count == 1
         cmd = run.call_args.args[0]
         assert cmd[0] == "/usr/bin/rclone"
-        assert cmd[1] == "moveto"
-        assert cmd[2] == "onedrive:old.mp3"
-        assert cmd[3] == "onedrive:new.mp3"
+        assert cmd[1] == "sync"
+        assert cmd[2] == str(album_folder)
+        assert cmd[3] == "onedrive:Artist/Album"
+        assert "--track-renames" in cmd
+        assert "--checksum" in cmd
         assert "--dry-run" not in cmd
 
-    def test_appends_dry_run_flag(self, sync, src_dst):
-        src, dst = src_dst
+    def test_appends_dry_run_flag(self, sync, album_folder):
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            sync.moveto(src, dst, dry_run=True)
+            sync.sync_folder(album_folder, dry_run=True)
         assert "--dry-run" in run.call_args.args[0]
 
-    def test_returns_failure_on_nonzero_exit(self, sync, src_dst):
-        src, dst = src_dst
-        # Stub _confirm_source_missing so the new divergence path doesn't
-        # invoke real subprocess probes; we want this test to assert the
-        # plain "rclone error" failure, not the recovery branch.
-        with patch.object(
-            sync,
-            "_confirm_source_missing",
-            return_value=DivergenceConfirmation(False, "test stub"),
-        ):
-            with patch("subprocess.run") as run:
-                run.return_value = MagicMock(
-                    returncode=3, stdout="", stderr="directory not found"
-                )
-                result = sync.moveto(src, dst)
+    def test_returns_failure_on_nonzero_exit(self, sync, album_folder):
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(
+                returncode=1, stdout="", stderr="permission denied"
+            )
+            result = sync.sync_folder(album_folder)
         assert result.success is False
-        assert result.mode == "failed"
-        assert "exit 3" in result.message
-        assert "directory not found" in result.message
+        assert "exit 1" in result.message
+        assert "permission denied" in result.message
 
-    def test_handles_timeout(self, sync, src_dst):
-        src, dst = src_dst
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="", timeout=1)):
-            result = sync.moveto(src, dst)
+    def test_uses_stdout_when_stderr_empty(self, sync, album_folder):
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(
+                returncode=1, stdout="some stdout error", stderr=""
+            )
+            result = sync.sync_folder(album_folder)
         assert result.success is False
-        assert result.mode == "failed"
+        assert "some stdout error" in result.message
+
+    def test_handles_timeout(self, sync, album_folder):
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="", timeout=1),
+        ):
+            result = sync.sync_folder(album_folder)
+        assert result.success is False
         assert "timed out" in result.message
 
-    def test_handles_missing_binary(self, sync, src_dst):
-        src, dst = src_dst
+    def test_handles_missing_binary(self, sync, album_folder):
         with patch("subprocess.run", side_effect=FileNotFoundError):
-            result = sync.moveto(src, dst)
+            result = sync.sync_folder(album_folder)
         assert result.success is False
-        assert result.mode == "failed"
         assert "not found" in result.message
+
+    def test_uses_custom_timeout(self, sync, album_folder):
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            sync.sync_folder(album_folder, timeout=999)
+        assert run.call_args.kwargs.get("timeout") == 999
