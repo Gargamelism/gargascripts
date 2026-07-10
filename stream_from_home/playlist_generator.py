@@ -105,7 +105,7 @@ def get_main_albums(bands_info: List[BandInfo], number_of_albums: int) -> List[s
         ).lower()
         if user_response != "y":
             continue
-        
+
         chose_album = False
         while not chose_album:
             album = random.choice(band_info.albums)

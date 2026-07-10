@@ -103,10 +103,9 @@ def normalize_disc_folder_name(
             success=True, message=f"Would rename '{current.name}' to '{expected_name}'"
         )
 
-    result = renamer.commit(new_path, lambda: current.rename(new_path))
-    if result.success:
-        renamer.queue_sync(current.parent)
-    return result
+    return renamer.commit_and_queue(
+        new_path, lambda: current.rename(new_path), current.parent
+    )
 
 
 def create_multi_disc_structure(

@@ -1547,3 +1547,314 @@ class TestMainFunction:
 
         assert captured_args[0].mirror_onedrive is True
         assert captured_args[0].onedrive_root == str(onedrive_root)
+
+
+# ---------------------------------------------------------------------------
+# processor.matching — remaining coverage gaps
+# ---------------------------------------------------------------------------
+
+
+def _match_release(title="Album", track_title="Song", track_number=1, total_discs=1):
+    track = DiscogsTrack(
+        position="1", title=track_title, track_number=track_number, disc_number=1
+    )
+    return DiscogsRelease(
+        release_id=1,
+        title=title,
+        artists=["Artist"],
+        year=2020,
+        tracklist=[track],
+        total_discs=total_discs,
+    )
+
+
+class TestMatchTrackFromCachedReleaseFallbackTitle:
+    def test_falls_back_to_current_tags_title(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        good_track = release.tracklist[0]
+
+        p.discogs_client = Mock()
+        p.discogs_client.match_track_to_release = Mock(side_effect=[None, good_track])
+        prompts.prompt_missing_fields.side_effect = lambda m, f: m
+
+        af = _af(title="Different Title", track=None)
+        acr = Mock(title="ACR Title", artists=["Artist"])
+
+        result = p._match_track_from_cached_release(af, release, acr)
+
+        assert result is True
+        assert af.proposed_tags.title == "Song"
+        assert p.discogs_client.match_track_to_release.call_count == 2
+        p.discogs_client.match_track_to_release.assert_any_call(release, "ACR Title")
+        p.discogs_client.match_track_to_release.assert_any_call(
+            release, "Different Title"
+        )
+
+
+class TestSearchAndMatchDiscogsNoReleasesBranch:
+    def test_acr_only_proposed_none_skips(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[])
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.ACR_ONLY
+        prompts.prompt_missing_fields.side_effect = lambda m, f: None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+        assert af.proposed_tags is None
+
+    def test_manual_url_fetch_succeeds_then_no_matchable_releases(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[])
+        p.discogs_client.get_entity = Mock(return_value=release)
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.side_effect = [
+            NoDiscogsMatchAction.MANUAL_URL,
+            NoDiscogsMatchAction.SKIP,
+        ]
+        prompts.get_discogs_url_or_id.return_value = (True, 42)
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        p.discogs_client.get_entity.assert_called_once_with(42, True)
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_manual_url_no_parsed_id_skips(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[])
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL_URL
+        prompts.get_discogs_url_or_id.return_value = None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_retry_still_no_releases_returns_none(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[])
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.RETRY
+        prompts.get_modified_search_query.return_value = ("Artist", "Song")
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.discogs_client.find_best_release.call_count == 2
+
+
+class TestSearchAndMatchDiscogsWhileLoopBranches:
+    def test_acr_only_in_while_loop(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.ACR_ONLY
+        prompts.prompt_missing_fields.side_effect = lambda m, f: m
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert af.proposed_tags is not None
+        assert af.proposed_tags.title == "Song"
+
+    def test_acr_only_in_while_loop_proposed_none_skips(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.ACR_ONLY
+        prompts.prompt_missing_fields.side_effect = lambda m, f: None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+        assert af.proposed_tags is None
+
+    def test_manual_url_fetch_fails_in_while_loop_then_skip(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        p.discogs_client.get_entity = Mock(return_value=None)
+        prompts.handle_no_discogs_match.side_effect = [
+            NoDiscogsMatchAction.MANUAL_URL,
+            NoDiscogsMatchAction.SKIP,
+        ]
+        prompts.get_discogs_url_or_id.return_value = (False, 1)
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_manual_url_no_parsed_id_continues_loop_in_while(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.side_effect = [
+            NoDiscogsMatchAction.MANUAL_URL,
+            NoDiscogsMatchAction.SKIP,
+        ]
+        prompts.get_discogs_url_or_id.return_value = None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+        assert prompts.handle_no_discogs_match.call_count == 2
+
+    def test_manual_action_sets_proposed_in_while_loop(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        manual = TrackMetadata(title="M", artist="A", album="B", track_number=1)
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL
+        prompts.get_manual_metadata.return_value = manual
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert af.proposed_tags is manual
+
+    def test_manual_action_none_skips_in_while_loop(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.MANUAL
+        prompts.get_manual_metadata.return_value = None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_quit_in_while_loop_exits(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = NoDiscogsMatchAction.QUIT
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        with pytest.raises(SystemExit):
+            p._search_and_match_discogs(af, acr)
+
+    def test_unhandled_action_in_while_loop_returns_none(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release(track_title="No Match")
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=None)
+        prompts.handle_no_discogs_match.return_value = object()
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+
+
+class TestSearchAndMatchDiscogsFinalSelectionBranches:
+    def test_manual_url_fetch_fails_in_candidate_selection_skips(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        track = release.tracklist[0]
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=track)
+        p.discogs_client.get_entity = Mock(return_value=None)
+        prompts.show_discogs_candidates.return_value = "manual_url"
+        prompts.get_discogs_url_or_id.return_value = (False, 1)
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_final_proposed_none_skips(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        track = release.tracklist[0]
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=track)
+        prompts.show_discogs_candidates.return_value = 0
+        prompts.prompt_missing_fields.side_effect = lambda m, f: None
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_force_override_declined_returns_release_without_proposed(
+        self, config, args, prompts
+    ):
+        args.force = True
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        track = release.tracklist[0]
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=track)
+        prompts.show_discogs_candidates.return_value = 0
+        prompts.prompt_missing_fields.side_effect = lambda m, f: m
+        prompts.confirm_force_override.return_value = False
+
+        af = _af(track=5)  # complete tags; track_number differs from proposed (1)
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is release
+        assert af.proposed_tags is None

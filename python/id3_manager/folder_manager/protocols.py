@@ -17,6 +17,13 @@ class RenameCoordinator(Protocol):
         commit_fn: Callable[[], None],
     ) -> CommitResult: ...
 
+    def commit_and_queue(
+        self,
+        local_dst: Path,
+        commit_fn: Callable[[], None],
+        sync_folder: Path,
+    ) -> CommitResult: ...
+
 
 class MultiDiscOrganizer(Protocol):
     """Creates multi-disc folder structures and moves files into them."""

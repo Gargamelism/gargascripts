@@ -30,7 +30,6 @@ from models import DiscogsRelease, DiscogsTrack, TrackMetadata
 
 logger = logging.getLogger(__name__)
 
-MUSIC_ROOT = Path("/Volumes/data_2/onedrive/Music/Chopin, Fredric")
 COMPOSER = "Frédéric Chopin"
 GENRE = "Classical"
 AUDIO_EXTS = {".mp3", ".flac", ".m4a"}
@@ -441,6 +440,11 @@ def main() -> None:
         help="Process a single folder instead of the whole tree",
     )
     parser.add_argument(
+        "--music-root",
+        metavar="PATH",
+        help="Root folder containing Chopin album folders (required unless --folder is given)",
+    )
+    parser.add_argument(
         "--box-url",
         metavar="URL",
         help="Discogs release/master URL for a multi-disc box set; each folder is "
@@ -471,7 +475,10 @@ def main() -> None:
     if args.folder:
         folders = [Path(args.folder)]
     else:
-        folders = sorted(p for p in MUSIC_ROOT.iterdir() if p.is_dir())
+        if not args.music_root:
+            logger.error("--music-root is required unless --folder is given")
+            sys.exit(1)
+        folders = sorted(p for p in Path(args.music_root).iterdir() if p.is_dir())
 
     skip = bool(args.start_at)
     total_ok = total_err = 0

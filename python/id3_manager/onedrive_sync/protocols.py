@@ -1,7 +1,7 @@
 """Protocol defining the public interface for remote sync operations."""
 
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Optional, Protocol
 
 from sync_results import RcloneResult
 
@@ -17,5 +17,5 @@ class RemoteSync(Protocol):
         self,
         local_folder: Path,
         dry_run: bool = False,
-        timeout: int | None = None,
+        timeout: Optional[int] = None,
     ) -> RcloneResult: ...

@@ -40,6 +40,17 @@ class FolderManager:
         except Exception as e:
             return CommitResult(success=False, message=str(e))
 
+    def commit_and_queue(
+        self,
+        local_dst: Path,
+        commit_fn: Callable[[], None],
+        sync_folder: Path,
+    ) -> CommitResult:
+        result = self.commit(local_dst, commit_fn)
+        if result.success:
+            self.queue_sync(sync_folder)
+        return result
+
     # --- Disc detection / reorganization ---
 
     def detect_multi_disc_structure(self, folder_path: str) -> List[AlbumFolder]:
