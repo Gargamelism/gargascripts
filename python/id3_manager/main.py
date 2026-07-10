@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -14,7 +15,6 @@ from pathlib import Path
 from config import (
     load_config,
     validate_config,
-    eprint,
     get_discogs_token_instructions,
     get_acrcloud_instructions,
 )
@@ -22,6 +22,8 @@ from id3_handler import ID3Handler  # noqa: F401 — tests patch main.ID3Handler
 from interactive import InteractivePrompts
 from onedrive_sync import OneDriveSync
 from processor import ID3Processor
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -147,6 +149,13 @@ Examples:
         "falling back to /opt/homebrew/bin/rclone)",
     )
 
+    parser.add_argument(
+        "--sync-only",
+        action="store_true",
+        help="Sync the given folder to OneDrive via rclone and exit — no "
+        "tagging, renaming, or lookups. Requires --onedrive-root.",
+    )
+
     # Configuration
     parser.add_argument(
         "--env-file", default=".env", help="Path to .env file (default: ./.env)"
@@ -166,6 +175,7 @@ Examples:
 
 def main():
     """Main entry point."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = build_parser()
     args = parser.parse_args()
 
@@ -176,22 +186,39 @@ def main():
     # Validate --start-at usage
     if args.start_at:
         if not args.recursive:
-            eprint("Warning: --start-at has no effect without --recursive")
+            logger.warning("Warning: --start-at has no effect without --recursive")
         elif not os.path.exists(args.start_at):
             parser.error(f"Start folder does not exist: {args.start_at}")
         elif not os.path.isdir(args.start_at):
             parser.error(f"Start path is not a folder: {args.start_at}")
 
-    # Validate --onedrive-root when mirroring is requested so misconfiguration
-    # fails loudly instead of silently no-op'ing every mirror call.
-    if args.mirror_onedrive:
+    # Validate --onedrive-root when mirroring/syncing is requested so
+    # misconfiguration fails loudly instead of silently no-op'ing.
+    if args.mirror_onedrive or args.sync_only:
         if not args.onedrive_root:
-            parser.error("--onedrive-root is required when --mirror-onedrive is set")
+            parser.error(
+                "--onedrive-root is required when --mirror-onedrive or "
+                "--sync-only is set"
+            )
         onedrive_root = Path(args.onedrive_root)
         if not onedrive_root.exists():
             parser.error(f"OneDrive root does not exist: {args.onedrive_root}")
         elif not onedrive_root.is_dir():
             parser.error(f"OneDrive root is not a directory: {args.onedrive_root}")
+
+    if args.sync_only:
+        onedrive_sync = OneDriveSync(
+            local_root=Path(args.onedrive_root),
+            remote=args.onedrive_remote,
+            rclone_path=args.rclone_path,
+        )
+        result = onedrive_sync.sync_folder(Path(args.path), dry_run=args.dry_run)
+        if result.success:
+            print(result.message)
+            sys.exit(0)
+        else:
+            logger.error(result.message)
+            sys.exit(1)
 
     # --rename-only implies skipping all lookups
     if args.rename_only:
@@ -203,12 +230,12 @@ def main():
     missing = validate_config(config, args.skip_acr, args.skip_discogs)
 
     if missing:
-        eprint(f"\nMissing required credentials: {', '.join(missing)}")
+        logger.error(f"\nMissing required credentials: {', '.join(missing)}")
         if "DISCOGS_USER_TOKEN" in missing:
-            eprint(get_discogs_token_instructions())
+            logger.error(get_discogs_token_instructions())
         if any("ACRCLOUD" in m for m in missing):
-            eprint(get_acrcloud_instructions())
-        eprint("Use --skip-acr or --skip-discogs to proceed without them.\n")
+            logger.error(get_acrcloud_instructions())
+        logger.error("Use --skip-acr or --skip-discogs to proceed without them.\n")
         sys.exit(1)
 
     # Initialize prompts

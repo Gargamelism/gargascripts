@@ -142,6 +142,7 @@ class DiscogsTrack:
     duration: Optional[str] = None
     track_number: Optional[int] = None
     disc_number: Optional[int] = None
+    heading: Optional[str] = None
 
 
 @dataclass

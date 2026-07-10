@@ -95,17 +95,11 @@ def rename_folder(
     if current.name == new_name:
         return CommitResult(success=True, message="Folder already has correct name")
 
-    mirror = renamer.mirror_rename(current, new_path, dry_run, allow_recovery=False)
-    if not mirror.success:
-        return CommitResult(
-            success=False, message=f"Remote rename failed: {mirror.message}"
-        )
-
     if dry_run:
         return CommitResult(success=True, message=f"Would rename to: {new_path}")
 
-    return renamer.commit_with_rollback(
-        current, new_path, lambda: current.rename(new_path), mirror_result=mirror
+    return renamer.commit_and_queue(
+        new_path, lambda: current.rename(new_path), current.parent
     )
 
 
@@ -123,15 +117,9 @@ def rename_audio_file(
     if current.name == new_name:
         return CommitResult(success=True, message="File already has correct name")
 
-    mirror = renamer.mirror_rename(current, new_path, dry_run)
-    if not mirror.success:
-        return CommitResult(
-            success=False, message=f"Remote rename failed: {mirror.message}"
-        )
-
     if dry_run:
         return CommitResult(success=True, message=f"Would rename to: {new_name}")
 
-    return renamer.commit_with_rollback(
-        current, new_path, lambda: current.rename(new_path), mirror_result=mirror
+    return renamer.commit_and_queue(
+        new_path, lambda: current.rename(new_path), current.parent
     )

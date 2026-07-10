@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Set
 
-from config import eprint
 from models import (
     AudioFile,
     TrackMetadata,
@@ -21,6 +21,8 @@ from id3_handler import ID3Handler
 
 from . import finalize as _finalize
 from . import matching as _matching
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from processor import ID3Processor
@@ -83,7 +85,7 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
 
 def process_single_file(proc: ID3Processor, file_path: str) -> None:
     if not ID3Handler.is_supported(file_path):
-        eprint(f"Unsupported format: {file_path}")
+        logger.warning(f"Unsupported format: {file_path}")
         return
 
     af = AudioFile(

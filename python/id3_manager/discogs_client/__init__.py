@@ -1,5 +1,6 @@
 """Discogs API client for fetching album metadata."""
 
+import logging
 import re
 import time
 from typing import List, Optional
@@ -7,9 +8,10 @@ from typing import List, Optional
 import requests
 from rapidfuzz import fuzz
 
-from config import eprint
 from models import DiscogsRelease, DiscogsTrack
 from . import parsing as _parsing
+
+logger = logging.getLogger(__name__)
 
 # Title normalization patterns for track matching
 _RE_LEADING_TRACKNUM = re.compile(r"^\d+[\.\-\s]+")
@@ -40,7 +42,7 @@ class DiscogsClient:
             time.sleep(1.0 - elapsed)
 
         if self.rate_limit_remaining <= 5:
-            eprint("Approaching rate limit, waiting 60 seconds...")
+            logger.warning("Approaching rate limit, waiting 60 seconds...")
             time.sleep(60)
             self.rate_limit_remaining = 60
 
@@ -72,7 +74,7 @@ class DiscogsClient:
             self._update_rate_limit(resp)
             return resp.json().get("results", [])
         except requests.exceptions.RequestException as e:
-            eprint(f"Discogs search error: {e}")
+            logger.error(f"Discogs search error: {e}")
             return []
 
     def get_release(self, release_id: int) -> Optional[DiscogsRelease]:
@@ -87,16 +89,16 @@ class DiscogsClient:
             return _parsing.parse_release(resp.json())
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
-                eprint(
+                logger.warning(
                     f"Discogs release {release_id} not fetchable (404) — "
                     f"likely deleted/withdrawn, private, or still in moderation "
                     f"while search index is stale. Skipping."
                 )
                 return None
-            eprint(f"Discogs release fetch error: {e}")
+            logger.error(f"Discogs release fetch error: {e}")
             return None
         except requests.exceptions.RequestException as e:
-            eprint(f"Discogs release fetch error: {e}")
+            logger.error(f"Discogs release fetch error: {e}")
             return None
 
     def get_master(self, master_id: int) -> Optional[DiscogsRelease]:
@@ -109,15 +111,15 @@ class DiscogsClient:
             return _parsing.parse_release(resp.json(), is_master=True)
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
-                eprint(
+                logger.warning(
                     f"Discogs master {master_id} not fetchable (404) — "
                     f"likely deleted/withdrawn or still in moderation. Skipping."
                 )
                 return None
-            eprint(f"Discogs master fetch error: {e}")
+            logger.error(f"Discogs master fetch error: {e}")
             return None
         except requests.exceptions.RequestException as e:
-            eprint(f"Discogs master fetch error: {e}")
+            logger.error(f"Discogs master fetch error: {e}")
             return None
 
     def get_entity(self, entity_id: int, is_master: bool) -> Optional[DiscogsRelease]:

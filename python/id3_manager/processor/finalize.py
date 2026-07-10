@@ -1,13 +1,15 @@
 """Tag application, file/folder renames, collision detection, and discovery."""
 
+import logging
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 
-from config import eprint
 from models import AudioFile, CollisionMap, DiscTrack
 from id3_handler import ID3Handler
+
+logger = logging.getLogger(__name__)
 
 
 def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
@@ -41,23 +43,6 @@ def apply_tag_changes(proc, audio_files: List[AudioFile]) -> None:
 
     if tagged_now and not proc.args.dry_run:
         proc._push_tag_writes_to_onedrive(tagged_now)
-
-
-def push_tag_writes_to_onedrive(proc, files: List[AudioFile]) -> None:
-    onedrive = proc.folder_manager.onedrive_sync
-    if onedrive is None:
-        return
-    for af in files:
-        result = onedrive.copyto(Path(af.file_path), dry_run=proc.args.dry_run)
-        if not result.success:
-            proc.stats.errors.append(
-                f"OneDrive push failed for {af.file_path}: {result.message}"
-            )
-            proc.prompts.print(
-                f"  OneDrive push failed: {Path(af.file_path).name} - {result.message}"
-            )
-        elif not result.message.startswith("skipped"):
-            proc.prompts.print(f"  Pushed: {Path(af.file_path).name}")
 
 
 def detect_track_collisions(proc, audio_files: List[AudioFile]) -> CollisionMap:
@@ -197,7 +182,7 @@ def discover_audio_files(proc, folder_path: str) -> List[AudioFile]:
                 audio_files.append(af)
             except Exception as e:
                 proc.stats.malformed_files.append(str(file_path))
-                eprint(f"Malformed file (skipping): {file_path.name} - {e}")
+                logger.warning(f"Malformed file (skipping): {file_path.name} - {e}")
 
     audio_files.sort(
         key=lambda af: (

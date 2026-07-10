@@ -52,12 +52,29 @@ def parse_position(position: str) -> tuple:
     return None, None
 
 
+def _iter_track_entries(tracklist: list, heading: str = None) -> list:
+    """Flatten a Discogs tracklist, descending into sub_tracks (used for
+    box sets / classical works where movements are nested under a heading).
+    Each returned entry carries its parent heading title, if any."""
+    entries = []
+    for track_data in tracklist:
+        sub_tracks = track_data.get("sub_tracks")
+        if sub_tracks:
+            sub_heading = track_data.get("title") or heading
+            entries.extend(_iter_track_entries(sub_tracks, sub_heading))
+            continue
+        entry = dict(track_data)
+        entry["heading"] = heading
+        entries.append(entry)
+    return entries
+
+
 def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
     """Parse a Discogs release or master API response dict into a DiscogsRelease."""
     raw_tracks = []
     has_vinyl_positions = False
 
-    for track_data in data.get("tracklist", []):
+    for track_data in _iter_track_entries(data.get("tracklist", [])):
         if track_data.get("type_", "track") != "track":
             continue
         position = track_data.get("position", "")
@@ -68,6 +85,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                 "position": position,
                 "title": track_data.get("title", ""),
                 "duration": track_data.get("duration"),
+                "heading": track_data.get("heading"),
             }
         )
 
@@ -103,6 +121,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     duration=track_data["duration"],
                     track_number=track_number,
                     disc_number=disc,
+                    heading=track_data["heading"],
                 )
             )
             track_number += 1
@@ -116,6 +135,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     duration=track_data["duration"],
                     track_number=track_num,
                     disc_number=disc_num,
+                    heading=track_data["heading"],
                 )
             )
     else:
@@ -129,6 +149,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     duration=track_data["duration"],
                     track_number=track_num,
                     disc_number=disc_num,
+                    heading=track_data["heading"],
                 )
             )
 

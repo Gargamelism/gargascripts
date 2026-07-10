@@ -3,28 +3,25 @@
 from pathlib import Path
 from typing import Callable, Protocol, Tuple
 
-from sync_results import CommitResult, MoveResult
+from sync_results import CommitResult
 
 
 class RenameCoordinator(Protocol):
-    """Provides atomic rename + remote-mirror operations."""
+    """Provides atomic local rename commits and deferred remote-sync queuing."""
 
-    def mirror_rename(
-        self,
-        local_src: Path,
-        local_dst: Path,
-        dry_run: bool,
-        *,
-        allow_recovery: bool = True,
-    ) -> MoveResult: ...
+    def queue_sync(self, folder: Path) -> None: ...
 
-    def commit_with_rollback(
+    def commit(
         self,
-        local_src: Path,
         local_dst: Path,
         commit_fn: Callable[[], None],
-        *,
-        mirror_result: MoveResult,
+    ) -> CommitResult: ...
+
+    def commit_and_queue(
+        self,
+        local_dst: Path,
+        commit_fn: Callable[[], None],
+        sync_folder: Path,
     ) -> CommitResult: ...
 
 
@@ -46,3 +43,5 @@ class MultiDiscOrganizer(Protocol):
         disc_folder: str,
         dry_run: bool = False,
     ) -> CommitResult: ...
+
+    def queue_sync(self, folder: Path) -> None: ...

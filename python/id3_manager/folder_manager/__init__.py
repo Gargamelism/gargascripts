@@ -3,10 +3,9 @@
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from config import eprint
 from models import AlbumFolder, AudioFile
 from onedrive_sync.protocols import RemoteSync
-from sync_results import CommitResult, MoveResult
+from sync_results import CommitResult
 from . import disc as _disc
 from . import naming as _naming
 from .disc import DISC_PATTERNS
@@ -21,58 +20,36 @@ class FolderManager:
 
     def __init__(self, onedrive_sync: Optional[RemoteSync] = None):
         self.onedrive_sync = onedrive_sync
+        self.pending_sync: List[Path] = []
 
-    def mirror_rename(
-        self,
-        local_src: Path,
-        local_dst: Path,
-        dry_run: bool,
-        *,
-        allow_recovery: bool = True,
-    ) -> MoveResult:
+    def queue_sync(self, folder: Path) -> None:
         if self.onedrive_sync is None:
-            return MoveResult(success=True, message="", mode="skipped")
-        return self.onedrive_sync.moveto(
-            local_src, local_dst, dry_run=dry_run, allow_recovery=allow_recovery
-        )
+            return
+        folder = folder.resolve()
+        if folder not in self.pending_sync:
+            self.pending_sync.append(folder)
 
-    def commit_with_rollback(
+    def commit(
         self,
-        local_src: Path,
         local_dst: Path,
         commit_fn: Callable[[], None],
-        *,
-        mirror_result: MoveResult,
     ) -> CommitResult:
         try:
             commit_fn()
             return CommitResult(success=True, message=str(local_dst))
         except Exception as e:
-            if mirror_result.mode == "recovered":
-                if self.onedrive_sync is not None:
-                    self.onedrive_sync.log(
-                        f"[onedrive] WARNING: local commit failed after recovered rename "
-                        f"({local_src.name} -> {local_dst.name}); remote at NEW path, "
-                        f"local at OLD path. Next bisync will reconcile by downloading the NEW name."
-                    )
-                return CommitResult(
-                    success=False,
-                    message=f"{e} (remote already recovered to NEW name; not rolled back)",
-                )
-            rollback = self.mirror_rename(
-                local_dst, local_src, dry_run=False, allow_recovery=False
-            )
-            if not rollback.success:
-                eprint(
-                    f"WARNING: remote rollback FAILED after local commit error — "
-                    f"local and remote trees are out of sync. "
-                    f"Local error: {e}. Rollback error: {rollback.message}"
-                )
-                return CommitResult(
-                    success=False,
-                    message=f"local error: {e}; remote rollback failed: {rollback.message}",
-                )
             return CommitResult(success=False, message=str(e))
+
+    def commit_and_queue(
+        self,
+        local_dst: Path,
+        commit_fn: Callable[[], None],
+        sync_folder: Path,
+    ) -> CommitResult:
+        result = self.commit(local_dst, commit_fn)
+        if result.success:
+            self.queue_sync(sync_folder)
+        return result
 
     # --- Disc detection / reorganization ---
 
