@@ -59,6 +59,41 @@ class TestQueueSync:
         fm_sync.queue_sync(tmp_path)
         assert fm_sync.pending_sync == [tmp_path.resolve()]
 
+    def test_skips_child_already_covered_by_queued_parent(self, fm_sync, tmp_path):
+        child = tmp_path / "album"
+        child.mkdir()
+        fm_sync.queue_sync(tmp_path)
+        fm_sync.queue_sync(child)
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
+
+    def test_queuing_parent_drops_already_queued_child(self, fm_sync, tmp_path):
+        child = tmp_path / "album"
+        child.mkdir()
+        fm_sync.queue_sync(child)
+        fm_sync.queue_sync(tmp_path)
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
+
+    def test_sibling_folders_both_kept(self, fm_sync, tmp_path):
+        sibling_a = tmp_path / "artist_a"
+        sibling_b = tmp_path / "artist_b"
+        sibling_a.mkdir()
+        sibling_b.mkdir()
+        fm_sync.queue_sync(sibling_a)
+        fm_sync.queue_sync(sibling_b)
+        assert fm_sync.pending_sync == [sibling_a.resolve(), sibling_b.resolve()]
+
+    def test_rename_after_tag_write_leaves_only_parent_queued(self, fm_sync, tmp_path):
+        """Regression: a tag write queues the album folder; the subsequent folder
+        rename queues its stable parent, which must prune the now-stale entry."""
+        album = tmp_path / "Old Name"
+        album.mkdir()
+        fm_sync.queue_sync(album)
+
+        result = fm_sync.rename_folder(str(album), "New Name")
+
+        assert result.success is True
+        assert fm_sync.pending_sync == [tmp_path.resolve()]
+
 
 # ---------------------------------------------------------------------------
 # commit
