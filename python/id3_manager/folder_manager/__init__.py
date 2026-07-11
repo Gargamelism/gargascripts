@@ -26,8 +26,14 @@ class FolderManager:
         if self.onedrive_sync is None:
             return
         folder = folder.resolve()
-        if folder not in self.pending_sync:
-            self.pending_sync.append(folder)
+        if any(folder.is_relative_to(existing) for existing in self.pending_sync):
+            return
+        self.pending_sync = [
+            existing
+            for existing in self.pending_sync
+            if not existing.is_relative_to(folder)
+        ]
+        self.pending_sync.append(folder)
 
     def commit(
         self,
