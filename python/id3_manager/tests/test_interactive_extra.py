@@ -12,6 +12,7 @@ from interactive import InteractivePrompts
 from models import (
     AudioFile,
     TrackMetadata,
+    DiscogsCandidateAction,
     DiscogsRelease,
     DiscogsTrack,
     ProcessingStats,
@@ -133,12 +134,17 @@ class TestShowDiscogsCandidates:
     def test_returns_none_on_skip(self, p):
         with patch("builtins.input", return_value="s"):
             result = p.show_discogs_candidates(self._releases())
-        assert result is None
+        assert result == DiscogsCandidateAction.SKIP
 
     def test_returns_manual_url_on_u(self, p):
         with patch("builtins.input", return_value="u"):
             result = p.show_discogs_candidates(self._releases())
-        assert result == "manual_url"
+        assert result == DiscogsCandidateAction.MANUAL_URL
+
+    def test_returns_manual_on_m(self, p):
+        with patch("builtins.input", return_value="m"):
+            result = p.show_discogs_candidates(self._releases())
+        assert result == DiscogsCandidateAction.MANUAL
 
     def test_exits_on_q(self, p):
         with patch("builtins.input", return_value="q"), pytest.raises(SystemExit):
@@ -661,8 +667,13 @@ class TestHandleTrackNotInRelease:
             result = p.handle_track_not_in_release("song.mp3", "Album")
         assert result == TrackNotInReleaseAction.SEARCH
 
-    def test_returns_skip(self, p):
+    def test_returns_manual(self, p):
         with patch("builtins.input", return_value="2"):
+            result = p.handle_track_not_in_release("song.mp3", "Album")
+        assert result == TrackNotInReleaseAction.MANUAL
+
+    def test_returns_skip(self, p):
+        with patch("builtins.input", return_value="3"):
             result = p.handle_track_not_in_release("song.mp3", "Album")
         assert result == TrackNotInReleaseAction.SKIP
 

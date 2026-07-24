@@ -194,6 +194,29 @@ def process_single_file_obj(proc: ID3Processor, af: AudioFile, folder_release=No
                             proc, af, acr_result
                         )
                         return selected_release or folder_release
+                    case TrackNotInReleaseAction.MANUAL:
+                        defaults = TrackMetadata(
+                            album=folder_release.title,
+                            artist=folder_release.artists[0]
+                            if folder_release.artists
+                            else None,
+                            album_artist=folder_release.artists[0]
+                            if folder_release.artists
+                            else None,
+                            total_discs=folder_release.total_discs
+                            if folder_release.total_discs > 1
+                            else None,
+                            year=folder_release.year,
+                            genre=folder_release.genres[0]
+                            if folder_release.genres
+                            else None,
+                        ).merge_with(af.current_tags)
+                        manual_tags = proc.prompts.get_manual_metadata(defaults)
+                        if manual_tags:
+                            af.proposed_tags = manual_tags
+                        else:
+                            proc.stats.skipped_files.append(af)
+                        return folder_release
                     case TrackNotInReleaseAction.SKIP:
                         proc.stats.skipped_files.append(af)
                         return folder_release

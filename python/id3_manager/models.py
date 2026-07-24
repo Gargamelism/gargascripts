@@ -51,8 +51,15 @@ class NoDiscogsMatchAction(Enum):
 
 class TrackNotInReleaseAction(Enum):
     SEARCH = "search"
+    MANUAL = "manual"
     SKIP = "skip"
     QUIT = "quit"
+
+
+class DiscogsCandidateAction(Enum):
+    MANUAL_URL = "manual_url"
+    MANUAL = "manual"
+    SKIP = "skip"
 
 
 class DiscTrack(NamedTuple):

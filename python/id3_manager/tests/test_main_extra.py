@@ -15,6 +15,7 @@ from models import (
     AudioFile,
     TrackMetadata,
     DiscTrack,
+    DiscogsCandidateAction,
     DiscogsRelease,
     DiscogsTrack,
     AlbumFolder,
@@ -86,7 +87,7 @@ def prompts():
     p.prompt_missing_fields = Mock(side_effect=lambda m, f: m)
     p.get_manual_metadata = Mock(return_value=None)
     p.get_discogs_url_or_id = Mock(return_value=None)
-    p.show_discogs_candidates = Mock(return_value=None)
+    p.show_discogs_candidates = Mock(return_value=DiscogsCandidateAction.SKIP)
     p.edit_collision_files = Mock()
     p.confirm_force_override = Mock(return_value=True)
     return p
@@ -795,6 +796,57 @@ class TestProcessSingleFileObjCachedRelease:
 
         assert result is new_release
 
+    def test_no_match_in_cached_release_manual_entry(self, config, args, prompts):
+        args.skip_acr = False
+        p = _proc(config, args, prompts)
+        p.discogs_client = Mock()
+        release = self._make_release()
+        acr = self._make_acr()
+        p.acr_client = Mock()
+        p.acr_client.recognize_with_retry = Mock(return_value=acr)
+
+        prompts.handle_track_not_in_release.return_value = (
+            TrackNotInReleaseAction.MANUAL
+        )
+        manual_tags = TrackMetadata(
+            title="Manual Song", artist="Artist", track_number=1
+        )
+        prompts.get_manual_metadata.return_value = manual_tags
+
+        af = _af(track=None)
+        with patch(
+            "processor.matching.match_track_from_cached_release", return_value=False
+        ):
+            result = p._process_single_file_obj(af, folder_release=release)
+
+        assert af.proposed_tags is manual_tags
+        assert result is release
+
+    def test_no_match_in_cached_release_manual_entry_cancelled(
+        self, config, args, prompts
+    ):
+        args.skip_acr = False
+        p = _proc(config, args, prompts)
+        p.discogs_client = Mock()
+        release = self._make_release()
+        acr = self._make_acr()
+        p.acr_client = Mock()
+        p.acr_client.recognize_with_retry = Mock(return_value=acr)
+
+        prompts.handle_track_not_in_release.return_value = (
+            TrackNotInReleaseAction.MANUAL
+        )
+        prompts.get_manual_metadata.return_value = None
+
+        af = _af(track=None)
+        with patch(
+            "processor.matching.match_track_from_cached_release", return_value=False
+        ):
+            result = p._process_single_file_obj(af, folder_release=release)
+
+        assert af in p.stats.skipped_files
+        assert result is release
+
     def test_no_match_in_cached_release_quit_exits(self, config, args, prompts):
         args.skip_acr = False
         p = _proc(config, args, prompts)
@@ -910,7 +962,7 @@ class TestSearchAndMatchDiscogsManualUrl:
         p.discogs_client.find_best_release = Mock(return_value=[release])
         p.discogs_client.match_track_to_release = Mock(return_value=track)
         p.discogs_client.get_entity = Mock(return_value=release)
-        prompts.show_discogs_candidates.return_value = "manual_url"
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.MANUAL_URL
         prompts.get_discogs_url_or_id.return_value = (False, 1)
         prompts.prompt_missing_fields.side_effect = lambda m, f: m
 
@@ -927,7 +979,7 @@ class TestSearchAndMatchDiscogsManualUrl:
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[release])
         p.discogs_client.match_track_to_release = Mock(return_value=track)
-        prompts.show_discogs_candidates.return_value = "manual_url"
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.MANUAL_URL
         prompts.get_discogs_url_or_id.return_value = None
 
         af = _af()
@@ -944,7 +996,7 @@ class TestSearchAndMatchDiscogsManualUrl:
         p.discogs_client = Mock()
         p.discogs_client.find_best_release = Mock(return_value=[release])
         p.discogs_client.match_track_to_release = Mock(return_value=track)
-        prompts.show_discogs_candidates.return_value = None
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.SKIP
 
         af = _af()
         acr = Mock(title="Song", artists=["Artist"], album="Album")
@@ -1811,8 +1863,47 @@ class TestSearchAndMatchDiscogsFinalSelectionBranches:
         p.discogs_client.find_best_release = Mock(return_value=[release])
         p.discogs_client.match_track_to_release = Mock(return_value=track)
         p.discogs_client.get_entity = Mock(return_value=None)
-        prompts.show_discogs_candidates.return_value = "manual_url"
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.MANUAL_URL
         prompts.get_discogs_url_or_id.return_value = (False, 1)
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert p.stats.files_skipped == 1
+
+    def test_manual_metadata_entry_in_candidate_selection(self, config, args, prompts):
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        track = release.tracklist[0]
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=track)
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.MANUAL
+        manual_tags = TrackMetadata(
+            title="Manual Song", artist="Artist", track_number=1
+        )
+        prompts.get_manual_metadata.return_value = manual_tags
+
+        af = _af()
+        acr = Mock(title="Song", artists=["Artist"], album="Album")
+        result = p._search_and_match_discogs(af, acr)
+
+        assert result is None
+        assert af.proposed_tags is manual_tags
+
+    def test_manual_metadata_entry_in_candidate_selection_cancelled(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        release = _match_release()
+        track = release.tracklist[0]
+        p.discogs_client = Mock()
+        p.discogs_client.find_best_release = Mock(return_value=[release])
+        p.discogs_client.match_track_to_release = Mock(return_value=track)
+        prompts.show_discogs_candidates.return_value = DiscogsCandidateAction.MANUAL
+        prompts.get_manual_metadata.return_value = None
 
         af = _af()
         acr = Mock(title="Song", artists=["Artist"], album="Album")

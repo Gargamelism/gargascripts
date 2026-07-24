@@ -201,13 +201,15 @@ def handle_track_not_in_release(
     print(f"  Release: {release_title}")
     print()
     print("  [1] Search Discogs for this file")
-    print("  [2] Skip this file")
+    print("  [2] Enter metadata manually")
+    print("  [3] Skip this file")
     print("  [q] Quit")
     return ui._prompt_choice(
         "Select option:",
         {
             "1": TrackNotInReleaseAction.SEARCH,
-            "2": TrackNotInReleaseAction.SKIP,
+            "2": TrackNotInReleaseAction.MANUAL,
+            "3": TrackNotInReleaseAction.SKIP,
             "q": TrackNotInReleaseAction.QUIT,
         },
     )

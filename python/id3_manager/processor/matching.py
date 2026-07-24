@@ -3,7 +3,12 @@
 import sys
 from pathlib import Path
 
-from models import AudioFile, TrackMetadata, NoDiscogsMatchAction
+from models import (
+    AudioFile,
+    TrackMetadata,
+    DiscogsCandidateAction,
+    NoDiscogsMatchAction,
+)
 
 
 def match_track_from_cached_release(proc, af: AudioFile, release, acr_result) -> bool:
@@ -192,11 +197,19 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
     display_releases = [r for r, _ in matchable_releases]
     selected = proc.prompts.show_discogs_candidates(display_releases)
 
-    if selected is None:
+    if selected == DiscogsCandidateAction.SKIP:
         proc.stats.skipped_files.append(af)
         return None
 
-    if selected == "manual_url":
+    if selected == DiscogsCandidateAction.MANUAL:
+        manual_tags = proc.prompts.get_manual_metadata(af.current_tags)
+        if manual_tags:
+            af.proposed_tags = manual_tags
+        else:
+            proc.stats.skipped_files.append(af)
+        return None
+
+    if selected == DiscogsCandidateAction.MANUAL_URL:
         parsed = proc.prompts.get_discogs_url_or_id()
         if parsed:
             is_master, entity_id = parsed

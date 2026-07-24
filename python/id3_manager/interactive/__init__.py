@@ -6,6 +6,7 @@ from typing import List, Optional
 from models import (
     AudioFile,
     TrackMetadata,
+    DiscogsCandidateAction,
     DiscogsRelease,
     ProcessingStats,
     ACRCloudResult,
@@ -221,9 +222,10 @@ class InteractivePrompts:
     def show_acr_result(self, result: ACRCloudResult) -> None:
         return _display.show_acr_result(self, result)
 
+    # int is the chosen release's index into `releases`; DiscogsCandidateAction covers the lettered options.
     def show_discogs_candidates(
         self, releases: List[DiscogsRelease]
-    ) -> Optional[int | str]:
+    ) -> Optional[int | DiscogsCandidateAction]:
         return _display.show_discogs_candidates(self, releases)
 
     def show_file_rename(self, current_name: str, new_name: str) -> None:

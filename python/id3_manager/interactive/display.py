@@ -4,7 +4,13 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from models import AudioFile, ACRCloudResult, DiscogsRelease, ProcessingStats
+from models import (
+    AudioFile,
+    ACRCloudResult,
+    DiscogsCandidateAction,
+    DiscogsRelease,
+    ProcessingStats,
+)
 
 
 def show_file_comparison(ui, audio_file: AudioFile) -> None:
@@ -74,7 +80,9 @@ def show_acr_result(ui, result: ACRCloudResult) -> None:
     print(f"  Confidence: {result.confidence:.0%}")
 
 
-def show_discogs_candidates(ui, releases: List[DiscogsRelease]) -> Optional[int | str]:
+def show_discogs_candidates(
+    ui, releases: List[DiscogsRelease]
+) -> Optional[int | DiscogsCandidateAction]:
     if ui.auto_yes and releases:
         return 0
 
@@ -93,19 +101,22 @@ def show_discogs_candidates(ui, releases: List[DiscogsRelease]) -> Optional[int 
         print()
 
     print("  [u] Enter Discogs URL/ID manually")
+    print("  [m] Enter metadata manually")
     print("  [s] Skip this file")
     print("  [q] Quit processing")
 
     while True:
         choice = input(
-            f"\n{ui._c('bold', f'Select release [1-{len(releases)}/u/s/q]: ')} "
+            f"\n{ui._c('bold', f'Select release [1-{len(releases)}/u/m/s/q]: ')} "
         ).strip()
         if choice.lower() == "s":
-            return None
+            return DiscogsCandidateAction.SKIP
         if choice.lower() == "q":
             sys.exit(0)
         if choice.lower() == "u":
-            return "manual_url"
+            return DiscogsCandidateAction.MANUAL_URL
+        if choice.lower() == "m":
+            return DiscogsCandidateAction.MANUAL
         try:
             idx = int(choice)
             if 1 <= idx <= len(releases):
