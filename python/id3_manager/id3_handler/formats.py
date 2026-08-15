@@ -1,8 +1,15 @@
 """Stateless tag helpers shared across formats."""
 
-from typing import Optional
+from typing import Literal, Optional, TypedDict, get_args
 
-MP4_TAGS = {
+TagField = Literal[
+    "title", "artist", "album", "album_artist", "track", "disc", "year", "genre"
+]
+
+TagKeyMap = TypedDict("TagKeyMap", {field: str for field in get_args(TagField)})
+
+
+MP4_TAGS: TagKeyMap = {
     "title": "\xa9nam",
     "artist": "\xa9ART",
     "album": "\xa9alb",
@@ -11,6 +18,17 @@ MP4_TAGS = {
     "disc": "disk",
     "year": "\xa9day",
     "genre": "\xa9gen",
+}
+
+WMA_TAGS: TagKeyMap = {
+    "title": "Title",
+    "artist": "Author",
+    "album": "WM/AlbumTitle",
+    "album_artist": "WM/AlbumArtist",
+    "track": "WM/TrackNumber",
+    "disc": "WM/PartOfSet",
+    "year": "WM/Year",
+    "genre": "WM/Genre",
 }
 
 
@@ -49,7 +67,7 @@ def get_tag_str(tags: dict, key: str) -> Optional[str]:
     return None
 
 
-def get_mp4_tag(tags: dict, key: str, mp4_tags: dict) -> Optional[str]:
+def get_mp4_tag(tags: dict, key: TagField, mp4_tags: TagKeyMap) -> Optional[str]:
     """Get string value from MP4 tag dict."""
     mp4_key = mp4_tags.get(key)
     if mp4_key and mp4_key in tags:

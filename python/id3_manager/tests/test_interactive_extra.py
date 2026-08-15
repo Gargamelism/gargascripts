@@ -1,5 +1,6 @@
 """Extra coverage tests for interactive.py."""
 
+import dataclasses
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -42,10 +43,11 @@ def pay():
     return InteractivePrompts(no_color=True, auto_yes=True)
 
 
-def _af(title="Song", track=1, with_proposed=True):
+def _af(title="Song", track=1, with_proposed=True, conflicting=False):
     current = TrackMetadata(title=title, artist="A", album="B", track_number=track)
+    proposed_title = f"New {title}" if conflicting else title
     proposed = (
-        TrackMetadata(title=f"New {title}", artist="A", album="B", track_number=track)
+        TrackMetadata(title=proposed_title, artist="A", album="B", track_number=track)
         if with_proposed
         else None
     )
@@ -421,6 +423,46 @@ class TestEditTrackFields:
         af = _af()
         with patch("builtins.input", side_effect=["Z", "x"]):
             p._edit_track_fields(af)
+
+    def test_no_conflict_skips_base_prompt(self, p):
+        af = _af()
+        with patch("builtins.input", side_effect=["x"]) as mock_input:
+            p._edit_track_fields(af)
+        mock_input.assert_called_once()
+
+    def test_conflict_prompts_for_base(self, p):
+        af = _af(conflicting=True)
+        with (
+            patch.object(
+                p, "_prompt_choice", return_value="identification"
+            ) as mock_choice,
+            patch("builtins.input", return_value="x"),
+        ):
+            p._edit_track_fields(af)
+        assert "Edit based on" in mock_choice.call_args.args[0]
+
+    def test_conflict_identification_keeps_proposed(self, p):
+        af = _af(conflicting=True)
+        original_title = af.proposed_tags.title
+        with patch("builtins.input", side_effect=["i", "x"]):
+            p._edit_track_fields(af)
+        assert af.proposed_tags.title == original_title
+
+    def test_conflict_existing_swaps_all_fields_to_current(self, p):
+        af = _af(conflicting=True)
+        af.current_tags.genre = "Jazz"
+        af.proposed_tags.genre = None
+        with patch("builtins.input", side_effect=["e", "x"]):
+            p._edit_track_fields(af)
+        for f in dataclasses.fields(af.current_tags):
+            assert getattr(af.proposed_tags, f.name) == getattr(af.current_tags, f.name)
+
+    def test_conflict_default_is_identification(self, p):
+        af = _af(conflicting=True)
+        original_title = af.proposed_tags.title
+        with patch("builtins.input", side_effect=["", "x"]):
+            p._edit_track_fields(af)
+        assert af.proposed_tags.title == original_title
 
 
 # ---------------------------------------------------------------------------

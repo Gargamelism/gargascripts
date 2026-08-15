@@ -98,6 +98,11 @@ class TestIsSupported:
         assert ID3Handler.is_supported("/path/to/song.m4a") is True
         assert ID3Handler.is_supported("/path/to/song.M4A") is True
 
+    def test_supports_wma(self):
+        """Should support .wma files."""
+        assert ID3Handler.is_supported("/path/to/song.wma") is True
+        assert ID3Handler.is_supported("/path/to/song.WMA") is True
+
     def test_rejects_unsupported_formats(self):
         """Should reject unsupported formats."""
         assert ID3Handler.is_supported("/path/to/song.wav") is False
@@ -114,6 +119,7 @@ class TestGetFormat:
         assert ID3Handler.get_format("/path/to/song.mp3") == "mp3"
         assert ID3Handler.get_format("/path/to/song.flac") == "flac"
         assert ID3Handler.get_format("/path/to/song.m4a") == "m4a"
+        assert ID3Handler.get_format("/path/to/song.wma") == "wma"
 
     def test_case_insensitive(self):
         """Should handle uppercase extensions."""
@@ -169,11 +175,14 @@ class TestWriteTags:
                 raise Exception("can't sync to MPEG frame")
             return self._make_metadata()
 
-        with patch.object(handler, "read_tags", side_effect=fake_read_tags), \
-             patch.object(handler, "_write_mp3_tags", side_effect=fake_write_mp3), \
-             pytest.raises(RuntimeError, match="Write corrupted"):
-            handler.write_tags(str(mp3_file), self._make_metadata(),
-                               preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", side_effect=fake_read_tags),
+            patch.object(handler, "_write_mp3_tags", side_effect=fake_write_mp3),
+            pytest.raises(RuntimeError, match="Write corrupted"),
+        ):
+            handler.write_tags(
+                str(mp3_file), self._make_metadata(), preserve_existing=False
+            )
 
         assert mp3_file.read_bytes() == original_content  # restored
 
@@ -184,9 +193,13 @@ class TestWriteTags:
 
         metadata = self._make_metadata()
 
-        with patch.object(handler, "read_tags", return_value=metadata), \
-             patch.object(handler, "_write_mp3_tags", return_value=True):
-            result = handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", return_value=metadata),
+            patch.object(handler, "_write_mp3_tags", return_value=True),
+        ):
+            result = handler.write_tags(
+                str(mp3_file), metadata, preserve_existing=False
+            )
 
         assert result is True
 
@@ -202,9 +215,13 @@ class TestWriteTags:
             read_calls.append(file_path)
             return metadata
 
-        with patch.object(handler, "read_tags", side_effect=tracking_read), \
-             patch.object(handler, "_write_mp3_tags", return_value=True):
-            result = handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
+        with (
+            patch.object(handler, "read_tags", side_effect=tracking_read),
+            patch.object(handler, "_write_mp3_tags", return_value=True),
+        ):
+            result = handler.write_tags(
+                str(mp3_file), metadata, preserve_existing=False
+            )
 
         assert result is True
         assert len(read_calls) == 2, "expected pre-write and post-write read_tags calls"
@@ -218,9 +235,11 @@ class TestWriteTags:
 
         metadata = self._make_metadata()
 
-        with patch.object(handler, "read_tags", return_value=metadata), \
-             patch.object(handler, "_write_mp3_tags", side_effect=OSError("disk full")), \
-             pytest.raises(RuntimeError, match="Failed to write tags"):
+        with (
+            patch.object(handler, "read_tags", return_value=metadata),
+            patch.object(handler, "_write_mp3_tags", side_effect=OSError("disk full")),
+            pytest.raises(RuntimeError, match="Failed to write tags"),
+        ):
             handler.write_tags(str(mp3_file), metadata, preserve_existing=False)
 
         assert mp3_file.read_bytes() == original_content  # restored

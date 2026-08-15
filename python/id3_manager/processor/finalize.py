@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 
-from models import AudioFile, CollisionMap, DiscTrack
+from models import AudioFile, AudioFormat, CollisionMap, DiscTrack
 from id3_handler import ID3Handler
 
 logger = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ def discover_audio_files(proc, folder_path: str) -> List[AudioFile]:
                 current_tags = proc.id3_handler.read_tags(str(file_path))
                 af = AudioFile(
                     file_path=str(file_path),
-                    format=ID3Handler.get_format(str(file_path)) or "unknown",
+                    format=ID3Handler.get_format(str(file_path)) or AudioFormat.UNKNOWN,
                     current_tags=current_tags,
                 )
                 audio_files.append(af)

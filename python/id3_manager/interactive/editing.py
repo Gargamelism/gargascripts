@@ -172,7 +172,31 @@ def edit_track_fields(ui, audio_file: AudioFile) -> None:
         return
 
     proposed = audio_file.proposed_tags
+    current = audio_file.current_tags
     filename = Path(audio_file.file_path).name
+
+    conflicts = current.conflicts_with(proposed)
+    if conflicts:
+        print(
+            f"\n{ui._c('yellow', f'{filename} has {len(conflicts)} field(s) where identification disagrees with existing tags:')}"
+        )
+        for name in conflicts:
+            print(
+                f"    {name}: existing={getattr(current, name)!r}  identified={getattr(proposed, name)!r}"
+            )
+        base = ui._prompt_choice(
+            "Edit based on [i]dentification / [e]xisting tags:",
+            {
+                "i": "identification",
+                "identification": "identification",
+                "e": "existing",
+                "existing": "existing",
+            },
+            default="identification",
+        )
+        if base == "existing":
+            for f in dataclasses.fields(proposed):
+                setattr(proposed, f.name, getattr(current, f.name))
 
     fields = {
         "t": ("Title", "title", False),

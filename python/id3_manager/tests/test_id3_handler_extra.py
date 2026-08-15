@@ -229,7 +229,7 @@ class TestReadFlacTags:
             "genre": [None],
         }.get(key, default)
 
-        with patch("id3_handler.FLAC", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.flac.FLAC", return_value=mock_audio):
             result = handler._read_flac_tags(str(f))
         assert result.track_number == 5
         assert result.total_tracks == 12
@@ -254,7 +254,7 @@ class TestReadFlacTags:
             "genre": [None],
         }.get(key, default)
 
-        with patch("id3_handler.FLAC", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.flac.FLAC", return_value=mock_audio):
             result = handler._read_flac_tags(str(f))
         assert result.track_number == 3
         assert result.total_tracks is None
@@ -283,7 +283,7 @@ class TestReadM4aTags:
             "\xa9gen": ["Electronic"],
         }
 
-        with patch("id3_handler.MP4", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.m4a.MP4", return_value=mock_audio):
             result = handler._read_m4a_tags(str(f))
         assert result.title == "M4A Song"
         assert result.artist == "M4A Artist"
@@ -300,8 +300,56 @@ class TestReadM4aTags:
         mock_audio = MagicMock()
         mock_audio.tags = {}
 
-        with patch("id3_handler.MP4", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.m4a.MP4", return_value=mock_audio):
             result = handler._read_m4a_tags(str(f))
+        assert result.track_number is None
+        assert result.disc_number is None
+
+
+# ---------------------------------------------------------------------------
+# WMA round-trip tests
+# ---------------------------------------------------------------------------
+
+
+class TestReadWmaTags:
+    def test_reads_tags_from_wma(self, tmp_path):
+        f = tmp_path / "song.wma"
+        handler = ID3Handler()
+
+        mock_audio = MagicMock()
+        mock_audio.tags = {
+            "Title": ["WMA Song"],
+            "Author": ["WMA Artist"],
+            "WM/AlbumTitle": ["WMA Album"],
+            "WM/AlbumArtist": ["Album Artist"],
+            "WM/TrackNumber": ["3/12"],
+            "WM/PartOfSet": ["2/3"],
+            "WM/Year": ["2018"],
+            "WM/Genre": ["Electronic"],
+        }
+
+        with patch("id3_handler.tag_handlers.wma.ASF", return_value=mock_audio):
+            result = handler._read_wma_tags(str(f))
+        assert result.title == "WMA Song"
+        assert result.artist == "WMA Artist"
+        assert result.album == "WMA Album"
+        assert result.album_artist == "Album Artist"
+        assert result.track_number == 3
+        assert result.total_tracks == 12
+        assert result.disc_number == 2
+        assert result.total_discs == 3
+        assert result.year == 2018
+        assert result.genre == "Electronic"
+
+    def test_reads_empty_wma_tags(self, tmp_path):
+        f = tmp_path / "empty.wma"
+        handler = ID3Handler()
+
+        mock_audio = MagicMock()
+        mock_audio.tags = {}
+
+        with patch("id3_handler.tag_handlers.wma.ASF", return_value=mock_audio):
+            result = handler._read_wma_tags(str(f))
         assert result.track_number is None
         assert result.disc_number is None
 
@@ -372,10 +420,42 @@ class TestWriteTagsMethods:
         mock_audio = MagicMock()
         mock_audio.tags = {}
 
-        with patch("id3_handler.MP4", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.m4a.MP4", return_value=mock_audio):
             result = handler._write_m4a_tags(str(f), meta)
         assert result is True
         mock_audio.save.assert_called_once()
+
+    def test_write_wma_tags_round_trip(self, tmp_path):
+        f = tmp_path / "w.wma"
+        handler = ID3Handler()
+        meta = TrackMetadata(
+            title="WMA Written",
+            artist="WMA Artist",
+            album="WMA Album",
+            album_artist="Various Artists",
+            track_number=4,
+            total_tracks=10,
+            disc_number=1,
+            total_discs=1,
+            year=2016,
+            genre="Pop",
+        )
+
+        mock_audio = MagicMock()
+
+        with patch("id3_handler.tag_handlers.wma.ASF", return_value=mock_audio):
+            result = handler._write_wma_tags(str(f), meta)
+        assert result is True
+        mock_audio.save.assert_called_once()
+        calls = {c[0][0]: c[0][1] for c in mock_audio.__setitem__.call_args_list}
+        assert calls["Title"] == "WMA Written"
+        assert calls["Author"] == "WMA Artist"
+        assert calls["WM/AlbumTitle"] == "WMA Album"
+        assert calls["WM/AlbumArtist"] == "Various Artists"
+        assert calls["WM/TrackNumber"] == "4/10"
+        assert calls["WM/PartOfSet"] == "1/1"
+        assert calls["WM/Year"] == "2016"
+        assert calls["WM/Genre"] == "Pop"
 
     def test_write_m4a_creates_tags_if_none(self, tmp_path):
         f = tmp_path / "notags.m4a"
@@ -390,7 +470,7 @@ class TestWriteTagsMethods:
 
         mock_audio.add_tags.side_effect = fake_add_tags
 
-        with patch("id3_handler.MP4", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.m4a.MP4", return_value=mock_audio):
             handler._write_m4a_tags(str(f), TrackMetadata(title="T"))
         mock_audio.add_tags.assert_called_once()
 
@@ -677,7 +757,7 @@ class TestWriteFlacTagsMocked:
             genre="Rock",
         )
 
-        with patch("id3_handler.FLAC", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.flac.FLAC", return_value=mock_audio):
             result = handler._write_flac_tags(str(f), meta)
 
         assert result is True
@@ -703,7 +783,7 @@ class TestWriteFlacTagsMocked:
         mock_audio = MagicMock()
         mock_audio.__setitem__ = MagicMock()
 
-        with patch("id3_handler.FLAC", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.flac.FLAC", return_value=mock_audio):
             result = handler._write_flac_tags(str(f), TrackMetadata(title="T"))
 
         assert result is True
@@ -733,7 +813,7 @@ class TestWriteM4aTagsAlbumArtist:
             track_number=1,
         )
 
-        with patch("id3_handler.MP4", return_value=mock_audio):
+        with patch("id3_handler.tag_handlers.m4a.MP4", return_value=mock_audio):
             result = handler._write_m4a_tags(str(f), meta)
 
         assert result is True
@@ -769,6 +849,14 @@ class TestReadTagsDispatch:
         f.touch()
         handler = ID3Handler()
         with patch.object(handler, "_read_m4a_tags", return_value=TrackMetadata()) as m:
+            handler.read_tags(str(f))
+        m.assert_called_once_with(str(f))
+
+    def test_dispatches_to_read_wma(self, tmp_path):
+        f = tmp_path / "x.wma"
+        f.touch()
+        handler = ID3Handler()
+        with patch.object(handler, "_read_wma_tags", return_value=TrackMetadata()) as m:
             handler.read_tags(str(f))
         m.assert_called_once_with(str(f))
 

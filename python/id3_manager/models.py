@@ -1,10 +1,24 @@
 """Data models for ID3 Manager."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, NamedTuple, Optional
 
 from utils import file_needs_rename
+
+
+class AudioFormat(str, Enum):
+    """Supported audio file formats."""
+
+    MP3 = "mp3"
+    FLAC = "flac"
+    M4A = "m4a"
+    WMA = "wma"
+    UNKNOWN = "unknown"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class TagStatus(Enum):
@@ -112,6 +126,16 @@ class TrackMetadata:
             missing.append("album")
         return missing
 
+    def conflicts_with(self, other: "TrackMetadata") -> List[str]:
+        """Field names where both self and other are set but differ."""
+        return [
+            f.name
+            for f in dataclasses.fields(self)
+            if getattr(self, f.name) is not None
+            and getattr(other, f.name) is not None
+            and getattr(self, f.name) != getattr(other, f.name)
+        ]
+
     def merge_with(self, other: "TrackMetadata") -> "TrackMetadata":
         """Create new metadata by filling missing fields from other."""
         return TrackMetadata(
@@ -186,7 +210,7 @@ class AudioFile:
     """Represents an audio file with its current and proposed metadata."""
 
     file_path: str
-    format: str  # 'mp3', 'flac', 'm4a'
+    format: AudioFormat
     current_tags: TrackMetadata = field(default_factory=TrackMetadata)
     proposed_tags: Optional[TrackMetadata] = None
     acr_result: Optional[ACRCloudResult] = None

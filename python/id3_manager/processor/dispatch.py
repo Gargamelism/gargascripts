@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List, Optional, Set
 
 from models import (
     AudioFile,
+    AudioFormat,
     TrackMetadata,
     ConfirmAction,
     CollisionMap,
@@ -90,7 +91,7 @@ def process_single_file(proc: ID3Processor, file_path: str) -> None:
 
     af = AudioFile(
         file_path=file_path,
-        format=ID3Handler.get_format(file_path) or "unknown",
+        format=ID3Handler.get_format(file_path) or AudioFormat.UNKNOWN,
         current_tags=proc.id3_handler.read_tags(file_path),
     )
 

@@ -38,7 +38,9 @@ class TestTrackMetadata:
 
     def test_is_complete_multi_disc_with_disc_number(self):
         """Should return True for multi-disc when disc_number is present."""
-        meta = TrackMetadata(title="Song", artist="Artist", track_number=1, disc_number=2)
+        meta = TrackMetadata(
+            title="Song", artist="Artist", track_number=1, disc_number=2
+        )
         assert meta.is_complete(is_multi_disc=True) is True
 
     def test_get_status_complete(self, sample_metadata):
@@ -84,9 +86,34 @@ class TestTrackMetadata:
         assert merged.year == 2019
         assert merged.album == "Album"
 
+    def test_conflicts_with_returns_fields_that_differ(self):
+        """Should list field names where both sides are set but disagree."""
+        meta1 = TrackMetadata(title="Song", artist="Artist", track_number=5)
+        meta2 = TrackMetadata(title="Song", artist="Other Artist", track_number=7)
+
+        conflicts = meta1.conflicts_with(meta2)
+
+        assert set(conflicts) == {"artist", "track_number"}
+
+    def test_conflicts_with_ignores_fields_missing_on_either_side(self):
+        """Should not flag a field as conflicting if either side is None."""
+        meta1 = TrackMetadata(title="Song", album=None)
+        meta2 = TrackMetadata(title="Song", album="Album")
+
+        assert meta1.conflicts_with(meta2) == []
+
+    def test_conflicts_with_returns_empty_when_no_overlap_differs(self):
+        """Should return an empty list when all shared fields match."""
+        meta1 = TrackMetadata(title="Song", artist="Artist")
+        meta2 = TrackMetadata(title="Song", artist="Artist", year=2020)
+
+        assert meta1.conflicts_with(meta2) == []
+
     def test_get_missing_required_fields_returns_empty_when_complete(self):
         """Should return empty list when all required fields present."""
-        meta = TrackMetadata(title="Song", artist="Artist", album="Album", track_number=1)
+        meta = TrackMetadata(
+            title="Song", artist="Artist", album="Album", track_number=1
+        )
         assert meta.get_missing_required_fields() == []
 
     def test_get_missing_required_fields_returns_missing_title(self):
@@ -297,7 +324,9 @@ class TestAudioFileHashability:
         audio_files = [
             AudioFile("/path/song1.mp3", "mp3", TrackMetadata(title="A")),
             AudioFile("/path/song2.mp3", "mp3", TrackMetadata(title="B")),
-            AudioFile("/path/song1.mp3", "mp3", TrackMetadata(title="C")),  # Duplicate path
+            AudioFile(
+                "/path/song1.mp3", "mp3", TrackMetadata(title="C")
+            ),  # Duplicate path
         ]
         # Simulates the pattern used in main.py _process_folder
         unique_files = {af for af in audio_files}
