@@ -160,6 +160,20 @@ class ID3Processor:
                 self._handle_folder_rename(folder_path, audio_files)
             return
 
+        if self.args.edit_only:
+            self.prompts.show_folder_status(folder_path, len(audio_files), 0, 0)
+            self.stats.skipped_files.extend(audio_files)
+        else:
+            self._process_folder_lookups(folder_path, audio_files)
+
+        if not self.args.no_rename:
+            self._handle_folder_rename(folder_path, audio_files)
+
+        self._maybe_flush_pending_sync()
+
+    def _process_folder_lookups(
+        self, folder_path: str, audio_files: List[AudioFile]
+    ) -> None:
         disc_folders = self.folder_manager.detect_multi_disc_structure(folder_path)
 
         if len(disc_folders) > 1:
@@ -183,30 +197,26 @@ class ID3Processor:
                 disc_files = self._discover_audio_files(disc_folder.folder_path)
                 if disc_files:
                     self._process_disc(disc_folder, disc_files)
-        else:
-            needs_tag_update = [af for af in audio_files if af.needs_processing]
-            needs_rename = (
-                [af for af in audio_files if af.needs_rename]
-                if not self.args.no_file_rename
-                else []
+            return
+
+        needs_tag_update = [af for af in audio_files if af.needs_processing]
+        needs_rename = (
+            [af for af in audio_files if af.needs_rename]
+            if not self.args.no_file_rename
+            else []
+        )
+        self.prompts.show_folder_status(
+            folder_path, len(audio_files), len(needs_tag_update), len(needs_rename)
+        )
+
+        files_needing_work = {
+            af for af in audio_files if af.needs_processing or af.needs_rename
+        }
+        if files_needing_work or self.args.force:
+            files_to_process = (
+                audio_files if self.args.force else list(files_needing_work)
             )
-            self.prompts.show_folder_status(
-                folder_path, len(audio_files), len(needs_tag_update), len(needs_rename)
-            )
-
-            files_needing_work = {
-                af for af in audio_files if af.needs_processing or af.needs_rename
-            }
-            if files_needing_work or self.args.force:
-                files_to_process = (
-                    audio_files if self.args.force else list(files_needing_work)
-                )
-                self._process_files(files_to_process)
-
-        if not self.args.no_rename:
-            self._handle_folder_rename(folder_path, audio_files)
-
-        self._maybe_flush_pending_sync()
+            self._process_files(files_to_process)
 
     def _maybe_flush_pending_sync(self) -> None:
         return _sync.maybe_flush_pending_sync(self)

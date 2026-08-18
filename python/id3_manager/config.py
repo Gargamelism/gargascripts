@@ -27,6 +27,7 @@ class AppArgs(Protocol):
     skip_acr: bool
     skip_discogs: bool
     rename_only: bool
+    edit_only: bool
     no_rename: bool
     no_file_rename: bool
     mirror_onedrive: bool

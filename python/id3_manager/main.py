@@ -112,6 +112,13 @@ Examples:
         help="Only rename files based on existing ID3 tags (skip all lookups)",
     )
 
+    parser.add_argument(
+        "--edit-only",
+        action="store_true",
+        help="Skip ACRCloud/Discogs lookups and open the manual editor for every "
+        "file, even ones with complete tags (e.g. to fix a single field like year)",
+    )
+
     # Folder handling
     parser.add_argument(
         "--no-rename", action="store_true", help="Skip folder renaming step"
@@ -192,6 +199,9 @@ def main():
         elif not os.path.isdir(args.start_at):
             parser.error(f"Start path is not a folder: {args.start_at}")
 
+    if args.rename_only and args.edit_only:
+        parser.error("--rename-only and --edit-only cannot be used together")
+
     # Validate --onedrive-root when mirroring/syncing is requested so
     # misconfiguration fails loudly instead of silently no-op'ing.
     if args.mirror_onedrive or args.sync_only:
@@ -222,6 +232,11 @@ def main():
 
     # --rename-only implies skipping all lookups
     if args.rename_only:
+        args.skip_acr = True
+        args.skip_discogs = True
+
+    # --edit-only implies skipping all lookups too (manual edit instead)
+    if args.edit_only:
         args.skip_acr = True
         args.skip_discogs = True
 

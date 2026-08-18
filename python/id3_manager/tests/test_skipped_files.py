@@ -42,6 +42,7 @@ def args():
         no_rename=True,
         no_file_rename=True,
         rename_only=False,
+        edit_only=False,
         env_file=".env",
         no_color=True,
         quiet=True,

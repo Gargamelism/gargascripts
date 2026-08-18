@@ -100,6 +100,10 @@ def process_single_file(proc: ID3Processor, file_path: str) -> None:
             _finalize.handle_file_renames(proc, [af])
         return
 
+    if proc.args.edit_only:
+        proc.stats.skipped_files.append(af)
+        return
+
     process_single_file_obj(proc, af)
 
     if af.has_actual_changes:

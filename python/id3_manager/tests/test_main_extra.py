@@ -48,6 +48,7 @@ def args():
         no_rename=False,
         no_file_rename=False,
         rename_only=False,
+        edit_only=False,
         env_file=".env",
         no_color=True,
         quiet=True,
@@ -1564,6 +1565,36 @@ class TestMainFunction:
 
         assert captured_args[0].skip_acr is True
         assert captured_args[0].skip_discogs is True
+
+    def test_edit_only_sets_skip_flags(self, tmp_path):
+        f = tmp_path / "song.mp3"
+        f.touch()
+        captured_args = []
+        with (
+            patch("sys.argv", ["main.py", str(f), "--edit-only"]),
+            patch("main.load_config", return_value={}),
+            patch("main.validate_config", return_value=[]),
+            patch("main.InteractivePrompts"),
+            patch("main.ID3Processor") as MockProc,
+        ):
+            MockProc.return_value.process = Mock()
+
+            def capture_init(config, a, prompts, **kwargs):
+                captured_args.append(a)
+                return Mock(process=Mock())
+
+            MockProc.side_effect = capture_init
+            main()
+
+        assert captured_args[0].skip_acr is True
+        assert captured_args[0].skip_discogs is True
+
+    def test_rename_only_and_edit_only_mutually_exclusive(self, tmp_path):
+        f = tmp_path / "song.mp3"
+        f.touch()
+        with patch("sys.argv", ["main.py", str(f), "--rename-only", "--edit-only"]):
+            with pytest.raises(SystemExit):
+                main()
 
     def test_mirror_onedrive_creates_onedrive_sync(self, tmp_path):
         f = tmp_path / "song.mp3"

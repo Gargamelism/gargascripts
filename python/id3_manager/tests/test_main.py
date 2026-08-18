@@ -49,6 +49,7 @@ def mock_args():
         no_rename=False,
         no_file_rename=False,
         rename_only=False,
+        edit_only=False,
         env_file=".env",
         no_color=True,
         quiet=True,
@@ -182,6 +183,18 @@ class TestBuildParser:
         parser = build_parser()
         args = parser.parse_args(["/path"])
         assert args.rename_only is False
+
+    def test_edit_only_flag(self):
+        """Should parse edit-only flag."""
+        parser = build_parser()
+        args = parser.parse_args(["/path", "--edit-only"])
+        assert args.edit_only is True
+
+    def test_edit_only_default_is_false(self):
+        """Should default edit-only to False."""
+        parser = build_parser()
+        args = parser.parse_args(["/path"])
+        assert args.edit_only is False
 
     def test_env_file_option(self):
         """Should parse custom env file path."""
@@ -993,6 +1006,85 @@ class TestRenameOnly:
         # Should NOT have attempted any ACR/Discogs lookups
         assert processor.stats.acr_lookups == 0
         assert processor.stats.discogs_lookups == 0
+
+
+class TestEditOnly:
+    """Tests for --edit-only mode."""
+
+    def test_edit_only_seeds_skipped_files_without_lookups(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should skip ACRCloud/Discogs and seed all files for editing instead."""
+        mock_args.edit_only = True
+        mock_args.skip_acr = True
+        mock_args.skip_discogs = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.folder_manager = Mock()
+        processor.folder_manager.onedrive_sync = None
+        processor.folder_manager.is_folder_properly_named = Mock(return_value=True)
+        processor.folder_manager.get_album_info_from_files = Mock(
+            return_value=(None, None)
+        )
+
+        af = AudioFile(
+            file_path="/test/complete.mp3",
+            format="mp3",
+            current_tags=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+                year=2000,
+            ),
+        )
+
+        with patch.object(processor, "_discover_audio_files", return_value=[af]):
+            processor._process_folder("/test")
+
+        # Should NOT have created ACR or Discogs clients
+        assert processor.acr_client is None
+        assert processor.discogs_client is None
+
+        # Should have skipped detection/lookups entirely
+        processor.folder_manager.detect_multi_disc_structure.assert_not_called()
+        assert af.acr_result is None
+        assert af.proposed_tags is None
+
+        # Should have seeded the file for editing instead of processing it
+        assert processor.stats.skipped_files == [af]
+
+    def test_edit_only_single_file_seeds_skipped_files(
+        self, mock_config, mock_args, mock_prompts
+    ):
+        """Should skip tag processing and seed the file for editing."""
+        mock_args.edit_only = True
+        mock_args.skip_acr = True
+        mock_args.skip_discogs = True
+
+        processor = ID3Processor(mock_config, mock_args, mock_prompts)
+        processor.id3_handler = Mock()
+        processor.id3_handler.read_tags = Mock(
+            return_value=TrackMetadata(
+                title="Song",
+                artist="Artist",
+                album="Album",
+                track_number=1,
+                year=2000,
+            )
+        )
+
+        with patch("main.ID3Handler.is_supported", return_value=True):
+            with patch("main.ID3Handler.get_format", return_value="mp3"):
+                processor._process_single_file("/test/complete.mp3")
+
+        # Should NOT have attempted any ACR/Discogs lookups
+        assert processor.stats.acr_lookups == 0
+
+        # Should have seeded the file for editing instead of processing it
+        assert len(processor.stats.skipped_files) == 1
+        assert processor.stats.skipped_files[0].file_path == "/test/complete.mp3"
+        assert processor.stats.skipped_files[0].proposed_tags is None
 
 
 class TestFilesOnlyNeedingRename:
