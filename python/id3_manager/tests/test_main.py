@@ -1011,10 +1011,10 @@ class TestRenameOnly:
 class TestEditOnly:
     """Tests for --edit-only mode."""
 
-    def test_edit_only_seeds_skipped_files_without_lookups(
+    def test_edit_only_reviews_folder_immediately_without_lookups(
         self, mock_config, mock_args, mock_prompts
     ):
-        """Should skip ACRCloud/Discogs and seed all files for editing instead."""
+        """Should skip ACRCloud/Discogs and open the edit review for the folder immediately."""
         mock_args.edit_only = True
         mock_args.skip_acr = True
         mock_args.skip_discogs = True
@@ -1051,8 +1051,9 @@ class TestEditOnly:
         assert af.acr_result is None
         assert af.proposed_tags is None
 
-        # Should have seeded the file for editing instead of processing it
-        assert processor.stats.skipped_files == [af]
+        # Should have opened the edit review for this folder right away, not deferred it
+        processor.prompts.review_skipped_files.assert_called_once_with([af])
+        assert processor.stats.skipped_files == []
 
     def test_edit_only_single_file_seeds_skipped_files(
         self, mock_config, mock_args, mock_prompts

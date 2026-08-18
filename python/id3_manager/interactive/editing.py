@@ -144,15 +144,22 @@ def review_skipped_files(ui, skipped_files: List[AudioFile]) -> None:
             title = tags.title or ui._c("dim", "(no title)")
             artist = tags.artist or ui._c("dim", "(no artist)")
             print(f"  [{i}] {filename}  —  {artist} / {title}")
+        print("  [a] Edit album (apply a field to all files)")
         print("  [d] Done")
 
         choice = (
-            input(f"\n{ui._c('bold', f'Select file [1-{len(skipped_files)}/d]: ')} ")
+            input(f"\n{ui._c('bold', f'Select file [1-{len(skipped_files)}/a/d]: ')} ")
             .strip()
             .lower()
         )
         if choice == "d":
             return
+        if choice == "a":
+            for af in skipped_files:
+                if af.proposed_tags is None:
+                    af.proposed_tags = dataclasses.replace(af.current_tags)
+            ui._handle_edit_album(skipped_files)
+            continue
         try:
             idx = int(choice)
             if 1 <= idx <= len(skipped_files):

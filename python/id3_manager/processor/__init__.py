@@ -162,7 +162,7 @@ class ID3Processor:
 
         if self.args.edit_only:
             self.prompts.show_folder_status(folder_path, len(audio_files), 0, 0)
-            self.stats.skipped_files.extend(audio_files)
+            self._review_files(audio_files)
         else:
             self._process_folder_lookups(folder_path, audio_files)
 
@@ -254,12 +254,14 @@ class ID3Processor:
             self._process_files(files_to_process)
 
     def _review_skipped_files(self) -> None:
-        skipped = self.stats.skipped_files
-        if not skipped:
-            return
-        self.prompts.review_skipped_files(skipped)
+        self._review_files(self.stats.skipped_files)
 
-        files_with_changes = [af for af in skipped if af.has_actual_changes]
+    def _review_files(self, files: List[AudioFile]) -> None:
+        if not files:
+            return
+        self.prompts.review_skipped_files(files)
+
+        files_with_changes = [af for af in files if af.has_actual_changes]
         if files_with_changes:
             for af in files_with_changes:
                 self.prompts.show_file_comparison(af)
@@ -268,8 +270,6 @@ class ID3Processor:
                 case ConfirmAction.APPLY:
                     _finalize.apply_tag_changes(self, files_with_changes)
                 case ConfirmAction.QUIT:
-                    import sys
-
                     sys.exit(0)
 
     # --- Dispatch shims ---
