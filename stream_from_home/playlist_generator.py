@@ -5,7 +5,7 @@ import random
 import argparse
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Tuple, Dict
+from typing import List, Literal, Optional, Tuple, Dict
 
 
 @dataclass
@@ -18,6 +18,7 @@ class BandInfo:
 class SpecialBandsConfig:
     preferred_bands: List[str] = None
     pending_bands: List[str] = None
+    collections: List[str] = None
 
 
 def scan_subfolders(base_folder: str) -> list[BandInfo]:
@@ -90,14 +91,14 @@ def validate_folder(folder_path: str) -> Optional[str]:
     return folder_path
 
 
-def get_main_albums(bands_info: List[BandInfo], number_of_albums: int) -> List[str]:
+def get_main_albums(bands_info: List[BandInfo], number_of_albums: int, collections_folders: List[str]) -> List[str]:
     """Get the specified number of albums from the bands info."""
     added_bands = set()
     playlist_paths = []
     while len(playlist_paths) < number_of_albums:
         band_info = random.choice(bands_info)
 
-        if band_info.band in added_bands:
+        if band_info.band in added_bands and band_info.band not in collections_folders:
             continue
 
         user_response = input(
@@ -343,28 +344,29 @@ def generate_playlist() -> None:
     if not music_base:
         return
 
-    special_bands = None
+    special_bands_config = None
     if args.special_bands:
         if not os.path.isfile(args.special_bands):
             print(f"Error: Additional config file not found: {args.special_bands}")
             return
         with open(args.special_bands, "r") as f:
-            special_bands = SpecialBandsConfig(**json.load(f))
+            special_bands_config = SpecialBandsConfig(**json.load(f))
+
 
     bands_info = get_folder_info(music_base)
     print(f"\nFound {len(bands_info)} bands in the music collection.")
 
-    playlist_paths = get_main_albums(bands_info, args.number)
+    playlist_paths = get_main_albums(bands_info, args.number, special_bands_config.collections)
 
-    if special_bands and special_bands.preferred_bands:
-        preferred_bands = [band for band in bands_info if band.band in special_bands.preferred_bands]
+    if special_bands_config and special_bands_config.preferred_bands:
+        preferred_bands = [band for band in bands_info if band.band in special_bands_config.preferred_bands]
         preferred_band = random.choice(preferred_bands)
         preferred_album = random.choice(preferred_band.albums)
         playlist_paths.append(preferred_album)
         print(f"Added preferred album: {preferred_album}")
 
-    if special_bands and special_bands.pending_bands:
-        pending_bands = [band for band in bands_info if band.band in special_bands.pending_bands]
+    if special_bands_config and special_bands_config.pending_bands:
+        pending_bands = [band for band in bands_info if band.band in special_bands_config.pending_bands]
         pending_band = random.choice(pending_bands)
         pending_album = random.choice(pending_band.albums)
         playlist_paths.append(pending_album)

@@ -39,6 +39,9 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
     _finalize.backfill_disc_info(proc, audio_files)
 
     conflicting: Set[AudioFile] = set()
+    # Files reviewed during collision edits stay in the final review even if the
+    # user kept their existing tags (proposed == current).
+    collision_edited: Set[AudioFile] = set()
     collisions: CollisionMap = _finalize.detect_track_collisions(proc, audio_files)
     while collisions:
         action: CollisionResolutionAction = proc.prompts.confirm_collision_resolution(
@@ -49,6 +52,9 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
                 sys.exit(0)
             case CollisionResolutionAction.EDIT:
                 proc.prompts.edit_collision_files(collisions)
+                collision_edited.update(
+                    af for grp in collisions.values() for af in grp if af.proposed_tags
+                )
                 collisions = _finalize.detect_track_collisions(proc, audio_files)
                 continue
             case CollisionResolutionAction.SKIP:
@@ -58,7 +64,11 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
                 proc.stats.skipped_files.extend(conflicting)
         break
 
-    files_with_changes = [af for af in audio_files if af.has_actual_changes]
+    files_with_changes = [
+        af
+        for af in audio_files
+        if af.has_actual_changes or (af in collision_edited and af not in conflicting)
+    ]
 
     if files_with_changes:
         for af in files_with_changes:
@@ -78,7 +88,9 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
         files_only_needing_rename = [
             af
             for af in audio_files
-            if not af.has_actual_changes and af.needs_rename and af not in conflicting
+            if af not in files_with_changes
+            and af.needs_rename
+            and af not in conflicting
         ]
         if files_only_needing_rename:
             _finalize.handle_file_renames(proc, files_only_needing_rename)
