@@ -29,10 +29,15 @@ def generate_disc_folder_name(disc_number: int) -> str:
 
 def generate_filename(metadata, extension: str) -> Optional[str]:
     if not all(
-        [metadata.artist, metadata.album, metadata.track_number, metadata.title]
+        [
+            metadata.album_artist or metadata.artist,
+            metadata.album,
+            metadata.track_number,
+            metadata.title,
+        ]
     ):
         return None
-    artist = sanitize_name(metadata.artist)
+    artist = sanitize_name(metadata.album_artist or metadata.artist)
     album = sanitize_name(metadata.album)
     title = sanitize_name(metadata.title)
     track_num = f"{metadata.track_number:02d}"

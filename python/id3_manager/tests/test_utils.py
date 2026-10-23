@@ -52,6 +52,14 @@ class TestGenerateExpectedFilename:
         result = generate_expected_filename(meta, ".mp3")
         assert result == "Artist Name - Album Name - 05 - Song Title.mp3"
 
+    def test_uses_album_artist(self):
+        meta = TrackMetadata(
+            title="Song", artist="Track Artist", album="Album",
+            album_artist="Various", track_number=9
+        )
+        result = generate_expected_filename(meta, ".mp3")
+        assert result == "Various - Album - 09 - Song.mp3"
+
     def test_pads_track_number(self):
         """Should zero-pad track number to 2 digits."""
         meta = TrackMetadata(

@@ -174,6 +174,8 @@ class DiscogsTrack:
     track_number: Optional[int] = None
     disc_number: Optional[int] = None
     heading: Optional[str] = None
+    artist: Optional[str] = None
+    sequential_number: Optional[int] = None
 
 
 @dataclass
@@ -189,6 +191,7 @@ class DiscogsRelease:
     genres: List[str] = field(default_factory=list)
     label: Optional[str] = None
     is_master: bool = False
+    has_vinyl_discs: bool = False
 
     @property
     def discogs_url(self) -> str:

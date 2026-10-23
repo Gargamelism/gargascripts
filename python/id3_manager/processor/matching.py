@@ -11,6 +11,25 @@ from models import (
 )
 
 
+def _track_position(proc, af: AudioFile, release, track) -> tuple:
+    """Return (track_number, disc_number, total_discs) for a matched track.
+
+    Multi-LP releases are numbered per disc by Discogs sides; ask once per
+    release whether the user's copy is actually split into discs."""
+    if release.has_vinyl_discs:
+        if release.release_id not in proc.vinyl_split_answers:
+            proc.vinyl_split_answers[release.release_id] = (
+                proc.prompts.confirm_vinyl_split(release)
+            )
+        if not proc.vinyl_split_answers[release.release_id]:
+            return track.sequential_number, None, None
+    return (
+        track.track_number,
+        track.disc_number or af.inferred_disc_number,
+        release.total_discs if release.total_discs > 1 else None,
+    )
+
+
 def match_track_from_cached_release(proc, af: AudioFile, release, acr_result) -> bool:
     track = proc.discogs_client.match_track_to_release(release, acr_result.title)
 
@@ -22,16 +41,19 @@ def match_track_from_cached_release(proc, af: AudioFile, release, acr_result) ->
     if track and track.track_number:
         af.discogs_release = release
         af.discogs_track = track
+        track_number, disc_number, total_discs = _track_position(
+            proc, af, release, track
+        )
 
         proposed = TrackMetadata(
             title=track.title,
-            artist=release.artists[0] if release.artists else None,
+            artist=track.artist or (release.artists[0] if release.artists else None),
             album=release.title,
             album_artist=release.artists[0] if release.artists else None,
-            track_number=track.track_number,
+            track_number=track_number,
             total_tracks=len(release.tracklist),
-            disc_number=track.disc_number or af.inferred_disc_number,
-            total_discs=release.total_discs if release.total_discs > 1 else None,
+            disc_number=disc_number,
+            total_discs=total_discs,
             year=release.year,
             genre=release.genres[0] if release.genres else None,
         )
@@ -233,16 +255,24 @@ def search_and_match_discogs(proc, af: AudioFile, acr_result):
 
     af.discogs_release = release
     af.discogs_track = track
+    if track:
+        track_number, disc_number, total_discs = _track_position(
+            proc, af, release, track
+        )
+    else:
+        track_number, disc_number = None, af.inferred_disc_number
+        total_discs = release.total_discs if release.total_discs > 1 else None
 
     proposed = TrackMetadata(
         title=track.title if track else acr_result.title,
-        artist=release.artists[0] if release.artists else artist,
+        artist=(track.artist if track else None)
+        or (release.artists[0] if release.artists else artist),
         album=release.title,
         album_artist=release.artists[0] if release.artists else None,
-        track_number=track.track_number if track else None,
+        track_number=track_number,
         total_tracks=len(release.tracklist),
-        disc_number=(track.disc_number if track else None) or af.inferred_disc_number,
-        total_discs=release.total_discs if release.total_discs > 1 else None,
+        disc_number=disc_number,
+        total_discs=total_discs,
         year=release.year,
         genre=release.genres[0] if release.genres else None,
     )

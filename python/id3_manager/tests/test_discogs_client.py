@@ -257,6 +257,38 @@ class TestParseReleaseVinyl:
         assert tracks["D2"].track_number == 4
         assert tracks["D2"].disc_number == 2
 
+        # Whole-release numbering for copies not split into discs
+        assert release.has_vinyl_discs
+        assert tracks["C1"].sequential_number == 5
+        assert tracks["D2"].sequential_number == 8
+
+    def test_track_artists_joined(self, client):
+        data = {
+            "id": 1,
+            "title": "Comp",
+            "artists": [{"name": "Various"}],
+            "tracklist": [
+                {
+                    "type_": "track",
+                    "position": "1",
+                    "title": "Duet",
+                    "artists": [
+                        {"name": "A (2)", "join": "&"},
+                        {"name": "B", "join": ","},
+                        {"name": "C", "join": ""},
+                    ],
+                },
+                {"type_": "track", "position": "2", "title": "Solo"},
+            ],
+        }
+
+        release = parse_release(data)
+
+        assert release.artists == ["Various"]
+        assert release.tracklist[0].artist == "A & B, C"
+        assert release.tracklist[1].artist is None
+        assert not release.has_vinyl_discs
+
     def test_non_vinyl_release_unchanged(self, client):
         """Non-vinyl releases should use standard position parsing."""
         data = {

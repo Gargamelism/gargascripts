@@ -17,7 +17,9 @@ def sanitize_filename(s: str) -> str:
     return s
 
 
-def generate_expected_filename(metadata: "TrackMetadata", extension: str) -> Optional[str]:
+def generate_expected_filename(
+    metadata: "TrackMetadata", extension: str
+) -> Optional[str]:
     """Generate expected filename from metadata.
 
     Args:
@@ -27,10 +29,17 @@ def generate_expected_filename(metadata: "TrackMetadata", extension: str) -> Opt
     Returns:
         Expected filename or None if required fields are missing
     """
-    if not all([metadata.title, metadata.artist, metadata.album, metadata.track_number]):
+    if not all(
+        [
+            metadata.title,
+            metadata.album_artist or metadata.artist,
+            metadata.album,
+            metadata.track_number,
+        ]
+    ):
         return None
 
-    artist = sanitize_filename(metadata.artist)
+    artist = sanitize_filename(metadata.album_artist or metadata.artist)
     album = sanitize_filename(metadata.album)
     title = sanitize_filename(metadata.title)
     track_num = f"{metadata.track_number:02d}"

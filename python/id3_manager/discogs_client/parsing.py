@@ -52,6 +52,18 @@ def parse_position(position: str) -> tuple:
     return None, None
 
 
+def join_artists(artists: list) -> str:
+    """Join Discogs artist entries using their `join` strings, e.g. "A & B"."""
+    parts = []
+    for artist in artists:
+        join = (artist.get("join") or "").strip()
+        parts += [
+            _RE_ARTIST_DISAMBIG.sub("", artist.get("name", "")),
+            ", " if join in ("", ",") else f" {join} ",
+        ]
+    return "".join(parts[:-1])
+
+
 def _iter_track_entries(tracklist: list, heading: str = None) -> list:
     """Flatten a Discogs tracklist, descending into sub_tracks (used for
     box sets / classical works where movements are nested under a heading).
@@ -86,6 +98,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                 "title": track_data.get("title", ""),
                 "duration": track_data.get("duration"),
                 "heading": track_data.get("heading"),
+                "artist": join_artists(track_data.get("artists", [])) or None,
             }
         )
 
@@ -122,6 +135,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     track_number=track_number,
                     disc_number=disc,
                     heading=track_data["heading"],
+                    artist=track_data["artist"],
                 )
             )
             track_number += 1
@@ -136,6 +150,7 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     track_number=track_num,
                     disc_number=disc_num,
                     heading=track_data["heading"],
+                    artist=track_data["artist"],
                 )
             )
     else:
@@ -150,8 +165,12 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
                     track_number=track_num,
                     disc_number=disc_num,
                     heading=track_data["heading"],
+                    artist=track_data["artist"],
                 )
             )
+
+    for i, track in enumerate(tracklist, 1):
+        track.sequential_number = i
 
     disc_numbers = {t.disc_number for t in tracklist if t.disc_number}
     total_discs = max(disc_numbers) if disc_numbers else 1
@@ -172,4 +191,5 @@ def parse_release(data: dict, is_master: bool = False) -> DiscogsRelease:
         genres=data.get("genres", []),
         label=label,
         is_master=is_master,
+        has_vinyl_discs=has_vinyl_positions and total_discs > 1,
     )

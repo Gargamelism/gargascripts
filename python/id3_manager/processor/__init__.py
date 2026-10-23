@@ -45,6 +45,7 @@ class ID3Processor:
         self.args = args
         self.prompts = prompts
         self.stats = ProcessingStats()
+        self.vinyl_split_answers: dict = {}
 
         self.id3_handler = ID3Handler()
         self.folder_manager = FolderManager(onedrive_sync=onedrive_sync)

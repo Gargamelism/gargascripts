@@ -119,6 +119,18 @@ class InteractivePrompts:
             default=False,
         )
 
+    def confirm_vinyl_split(self, release) -> bool:
+        if self.auto_yes:
+            return False
+        print(
+            f"\n{self._c('cyan', f'{release.title} is listed as {release.total_discs} vinyl discs on Discogs.')}"
+        )
+        return self._prompt_choice(
+            "Is it split into discs on your side? [y/N]:",
+            {"y": True, "yes": True, "n": False, "no": False},
+            default=False,
+        )
+
     def confirm_collision_resolution(
         self, collisions: CollisionMap
     ) -> CollisionResolutionAction:
