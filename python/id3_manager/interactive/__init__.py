@@ -1,5 +1,6 @@
 """Interactive user prompts and confirmations."""
 
+import dataclasses
 from pathlib import Path
 from typing import List, Optional
 
@@ -64,14 +65,18 @@ class InteractivePrompts:
     # --- Confirmations (stay here) ---
 
     def confirm_tag_changes(self, audio_files: List[AudioFile]) -> ConfirmAction:
+        # Every file is editable in the final review, even ones with no proposal.
+        for af in audio_files:
+            if af.proposed_tags is None:
+                af.proposed_tags = dataclasses.replace(af.current_tags)
+
         if self.auto_yes:
             return ConfirmAction.APPLY
 
-        files_with_changes = [af for af in audio_files if af.proposed_tags]
-
         while True:
+            changed_count = sum(af.has_actual_changes for af in audio_files)
             print(
-                f"\n{self._c('yellow', f'Ready to apply changes to {len(files_with_changes)} file(s).')}"
+                f"\n{self._c('yellow', f'Ready to apply changes to {changed_count} file(s).')}"
             )
             choice = self._prompt_choice(
                 "Apply changes? [y/N/r(eview)/e(dit)/a(lbum edit)/q(uit)]:",
@@ -89,15 +94,15 @@ class InteractivePrompts:
             )
             match choice:
                 case ConfirmAction.REVIEW:
-                    for af in files_with_changes:
+                    for af in audio_files:
                         self.show_file_comparison(af)
                 case ConfirmAction.EDIT:
-                    self._handle_edit_track(files_with_changes)
-                    for af in files_with_changes:
+                    self._handle_edit_track(audio_files)
+                    for af in audio_files:
                         self.show_file_comparison(af)
                 case ConfirmAction.ALBUM_EDIT:
-                    self._handle_edit_album(files_with_changes)
-                    for af in files_with_changes:
+                    self._handle_edit_album(audio_files)
+                    for af in audio_files:
                         self.show_file_comparison(af)
                 case _:
                     return choice

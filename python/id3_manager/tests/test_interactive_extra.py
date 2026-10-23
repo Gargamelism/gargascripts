@@ -231,6 +231,20 @@ class TestConfirmTagChanges:
             p.confirm_tag_changes(files)
         mock_alb.assert_called_once()
 
+    def test_files_without_proposal_are_editable(self, p):
+        files = [_af(), _af(title="Other", with_proposed=False)]
+        choices = iter([ConfirmAction.EDIT, ConfirmAction.APPLY])
+        with (
+            patch.object(
+                p, "_prompt_choice", side_effect=lambda *a, **kw: next(choices)
+            ),
+            patch.object(p, "_handle_edit_track") as mock_edit,
+            patch.object(p, "show_file_comparison"),
+        ):
+            p.confirm_tag_changes(files)
+        mock_edit.assert_called_once_with(files)
+        assert files[1].proposed_tags == files[1].current_tags
+
     def test_returns_quit(self, p):
         files = [_af()]
         with patch.object(p, "_prompt_choice", return_value=ConfirmAction.QUIT):

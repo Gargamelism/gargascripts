@@ -216,7 +216,7 @@ class ID3Processor:
             files_to_process = (
                 audio_files if self.args.force else list(files_needing_work)
             )
-            self._process_files(files_to_process)
+            self._process_files(files_to_process, audio_files)
 
     def _maybe_flush_pending_sync(self) -> None:
         return _sync.maybe_flush_pending_sync(self)
@@ -251,7 +251,7 @@ class ID3Processor:
                         af.proposed_tags = TrackMetadata()
                     af.proposed_tags.disc_number = disc_folder.detected_disc_number
 
-            self._process_files(files_to_process)
+            self._process_files(files_to_process, audio_files)
 
     def _review_skipped_files(self) -> None:
         self._review_files(self.stats.skipped_files)
@@ -261,21 +261,25 @@ class ID3Processor:
             return
         self.prompts.review_skipped_files(files)
 
-        files_with_changes = [af for af in files if af.has_actual_changes]
-        if files_with_changes:
-            for af in files_with_changes:
-                self.prompts.show_file_comparison(af)
-            result = self.prompts.confirm_tag_changes(files_with_changes)
-            match result:
-                case ConfirmAction.APPLY:
-                    _finalize.apply_tag_changes(self, files_with_changes)
-                case ConfirmAction.QUIT:
-                    sys.exit(0)
+        for af in files:
+            self.prompts.show_file_comparison(af)
+        result = self.prompts.confirm_tag_changes(files)
+        match result:
+            case ConfirmAction.APPLY:
+                _finalize.apply_tag_changes(
+                    self, [af for af in files if af.has_actual_changes]
+                )
+            case ConfirmAction.QUIT:
+                sys.exit(0)
 
     # --- Dispatch shims ---
 
-    def _process_files(self, audio_files: List[AudioFile]) -> None:
-        return _dispatch.process_files(self, audio_files)
+    def _process_files(
+        self,
+        audio_files: List[AudioFile],
+        all_files: Optional[List[AudioFile]] = None,
+    ) -> None:
+        return _dispatch.process_files(self, audio_files, all_files)
 
     def _process_single_file(self, file_path: str) -> None:
         return _dispatch.process_single_file(self, file_path)

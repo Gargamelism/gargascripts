@@ -29,7 +29,13 @@ if TYPE_CHECKING:
     from processor import ID3Processor
 
 
-def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
+def process_files(
+    proc: ID3Processor,
+    audio_files: List[AudioFile],
+    all_files: Optional[List[AudioFile]] = None,
+) -> None:
+    # all_files is the whole folder/disc; every file in it is offered in the final review.
+    all_files = audio_files if all_files is None else all_files
     folder_release: Optional[DiscogsRelease] = None
 
     for i, af in enumerate(audio_files):
@@ -39,9 +45,6 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
     _finalize.backfill_disc_info(proc, audio_files)
 
     conflicting: Set[AudioFile] = set()
-    # Files reviewed during collision edits stay in the final review even if the
-    # user kept their existing tags (proposed == current).
-    collision_edited: Set[AudioFile] = set()
     collisions: CollisionMap = _finalize.detect_track_collisions(proc, audio_files)
     while collisions:
         action: CollisionResolutionAction = proc.prompts.confirm_collision_resolution(
@@ -52,9 +55,6 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
                 sys.exit(0)
             case CollisionResolutionAction.EDIT:
                 proc.prompts.edit_collision_files(collisions)
-                collision_edited.update(
-                    af for grp in collisions.values() for af in grp if af.proposed_tags
-                )
                 collisions = _finalize.detect_track_collisions(proc, audio_files)
                 continue
             case CollisionResolutionAction.SKIP:
@@ -64,33 +64,29 @@ def process_files(proc: ID3Processor, audio_files: List[AudioFile]) -> None:
                 proc.stats.skipped_files.extend(conflicting)
         break
 
-    files_with_changes = [
-        af
-        for af in audio_files
-        if af.has_actual_changes or (af in collision_edited and af not in conflicting)
-    ]
+    review_files = [af for af in all_files if af not in conflicting]
+    changed: List[AudioFile] = []
 
-    if files_with_changes:
-        for af in files_with_changes:
+    if review_files:
+        for af in review_files:
             proc.prompts.show_file_comparison(af)
 
-        result = proc.prompts.confirm_tag_changes(files_with_changes)
+        result = proc.prompts.confirm_tag_changes(review_files)
+        changed = [af for af in review_files if af.has_actual_changes]
 
         match result:
             case ConfirmAction.APPLY:
-                _finalize.apply_tag_changes(proc, files_with_changes)
+                _finalize.apply_tag_changes(proc, changed)
             case ConfirmAction.QUIT:
                 sys.exit(0)
             case _:
-                proc.stats.skipped_files.extend(files_with_changes)
+                proc.stats.skipped_files.extend(changed)
 
     if not proc.args.no_file_rename:
         files_only_needing_rename = [
             af
-            for af in audio_files
-            if af not in files_with_changes
-            and af.needs_rename
-            and af not in conflicting
+            for af in all_files
+            if af not in changed and af.needs_rename and af not in conflicting
         ]
         if files_only_needing_rename:
             _finalize.handle_file_renames(proc, files_only_needing_rename)

@@ -388,6 +388,27 @@ class TestProcessFilesConfirmation:
 
         assert p.stats.files_skipped == 1
 
+    def test_review_includes_all_files_and_applies_only_changed(
+        self, config, args, prompts
+    ):
+        p = _proc(config, args, prompts)
+        p.folder_manager = Mock()
+        p.folder_manager.infer_disc_info_from_path = Mock(return_value=None)
+        p.folder_manager.should_rename_file = Mock(return_value=False)
+        p.folder_manager.onedrive_sync = None
+        p.id3_handler = Mock()
+        p.id3_handler.write_tags = Mock(return_value=True)
+
+        changed = _proposed(_af(track=1, path="/f/a.mp3"), title="New")
+        unchanged = _af(track=2, path="/f/b.mp3")
+
+        prompts.confirm_tag_changes.return_value = ConfirmAction.APPLY
+        p._process_files([changed], [changed, unchanged])
+
+        prompts.confirm_tag_changes.assert_called_once_with([changed, unchanged])
+        p.id3_handler.write_tags.assert_called_once()
+        assert p.id3_handler.write_tags.call_args[0][0] == "/f/a.mp3"
+
 
 # ---------------------------------------------------------------------------
 # _process_single_file
