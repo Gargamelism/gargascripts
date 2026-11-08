@@ -67,9 +67,12 @@ def join_artists(artists: list) -> str:
 def _iter_track_entries(tracklist: list, heading: str = None) -> list:
     """Flatten a Discogs tracklist, descending into sub_tracks (used for
     box sets / classical works where movements are nested under a heading).
-    Each returned entry carries its parent heading title, if any."""
+    Each returned entry carries its parent heading title, if any — either the
+    index track holding its sub_tracks, or the last preceding "heading" row."""
     entries = []
     for track_data in tracklist:
+        if track_data.get("type_") == "heading":
+            heading = track_data.get("title") or heading
         sub_tracks = track_data.get("sub_tracks")
         if sub_tracks:
             sub_heading = track_data.get("title") or heading

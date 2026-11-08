@@ -27,10 +27,21 @@ def release_with_tracks():
         artists=["Test Artist"],
         year=2020,
         tracklist=[
-            DiscogsTrack(position="1", title="First Song", track_number=1, disc_number=1),
-            DiscogsTrack(position="2", title="Second Song", track_number=2, disc_number=1),
-            DiscogsTrack(position="3", title="Third Song (Extended Mix)", track_number=3, disc_number=1),
-            DiscogsTrack(position="4", title="Another Track", track_number=4, disc_number=1),
+            DiscogsTrack(
+                position="1", title="First Song", track_number=1, disc_number=1
+            ),
+            DiscogsTrack(
+                position="2", title="Second Song", track_number=2, disc_number=1
+            ),
+            DiscogsTrack(
+                position="3",
+                title="Third Song (Extended Mix)",
+                track_number=3,
+                disc_number=1,
+            ),
+            DiscogsTrack(
+                position="4", title="Another Track", track_number=4, disc_number=1
+            ),
         ],
         total_discs=1,
     )
@@ -160,8 +171,15 @@ class TestMatchTrackToRelease:
     def test_word_order_variation(self, client):
         """Should match when words appear in different order."""
         release = DiscogsRelease(
-            release_id=1, title="A", artists=["A"], year=2020,
-            tracklist=[DiscogsTrack(position="1", title="You And Me", track_number=1, disc_number=1)],
+            release_id=1,
+            title="A",
+            artists=["A"],
+            year=2020,
+            tracklist=[
+                DiscogsTrack(
+                    position="1", title="You And Me", track_number=1, disc_number=1
+                )
+            ],
             total_discs=1,
         )
         track = client.match_track_to_release(release, "Me And You")
@@ -344,6 +362,32 @@ class TestParseReleaseVinyl:
         assert tracks["A2"].track_number == 2
         assert tracks["B1"].track_number == 3
         assert tracks["B2"].track_number == 4
+
+    def test_heading_rows_set_following_track_headings(self, client):
+        """Flat heading rows apply to the tracks after them, up to the next heading."""
+        data = {
+            "id": 12345,
+            "title": "Test Box",
+            "artists": [{"name": "Test Artist"}],
+            "year": 2020,
+            "genres": [],
+            "labels": [],
+            "tracklist": [
+                {"type_": "heading", "position": "", "title": "Symphony No. 1"},
+                {"type_": "track", "position": "1-1", "title": "Allegro"},
+                {"type_": "track", "position": "1-2", "title": "Adagio"},
+                {"type_": "heading", "position": "", "title": "Symphony No. 2"},
+                {"type_": "track", "position": "2-1", "title": "Allegro"},
+            ],
+        }
+
+        release = parse_release(data)
+
+        assert [t.heading for t in release.tracklist] == [
+            "Symphony No. 1",
+            "Symphony No. 1",
+            "Symphony No. 2",
+        ]
 
 
 class TestIsVinylPosition:
