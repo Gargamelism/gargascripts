@@ -15,6 +15,7 @@ class AudioFormat(str, Enum):
     FLAC = "flac"
     M4A = "m4a"
     WMA = "wma"
+    OGG = "ogg"
     UNKNOWN = "unknown"
 
     def __str__(self) -> str:

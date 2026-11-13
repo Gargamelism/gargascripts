@@ -153,19 +153,6 @@ def send_error_notification(bot_token: str, chat_id: str, error: str) -> None:
         pass
 
 
-# ─── Claude binary discovery ──────────────────────────────────────────────────
-
-def find_claude_binary() -> Optional[str]:
-    """Find the latest installed claude CLI binary (from VSCode extension)."""
-    pattern = os.path.expanduser(
-        "~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude"
-    )
-    binaries = glob.glob(pattern)
-    if not binaries:
-        return None
-    return max(binaries, key=os.path.getmtime)
-
-
 # ─── Data model ───────────────────────────────────────────────────────────────
 
 @dataclass
@@ -454,17 +441,12 @@ def analyze_with_claude(digest: LogDigest, logger: logging.Logger) -> Optional[d
     Call the claude CLI with the digest prompt.
     Returns parsed dict, or None on failure.
     """
-    claude_bin = find_claude_binary()
-    if not claude_bin:
-        logger.warning("claude binary not found")
-        return None
-
     prompt = f"{SYSTEM_PROMPT}\n\n{_build_user_message(digest)}"
 
     try:
         result = subprocess.run(
             [
-                claude_bin,
+                "claude",
                 "--print",
                 "--model", "haiku",
                 "--no-session-persistence",

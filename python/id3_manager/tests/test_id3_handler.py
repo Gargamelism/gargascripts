@@ -103,10 +103,14 @@ class TestIsSupported:
         assert ID3Handler.is_supported("/path/to/song.wma") is True
         assert ID3Handler.is_supported("/path/to/song.WMA") is True
 
+    def test_supports_ogg(self):
+        """Should support .ogg files."""
+        assert ID3Handler.is_supported("/path/to/song.ogg") is True
+        assert ID3Handler.is_supported("/path/to/song.OGG") is True
+
     def test_rejects_unsupported_formats(self):
         """Should reject unsupported formats."""
         assert ID3Handler.is_supported("/path/to/song.wav") is False
-        assert ID3Handler.is_supported("/path/to/song.ogg") is False
         assert ID3Handler.is_supported("/path/to/song.aac") is False
         assert ID3Handler.is_supported("/path/to/document.txt") is False
 
@@ -120,6 +124,7 @@ class TestGetFormat:
         assert ID3Handler.get_format("/path/to/song.flac") == "flac"
         assert ID3Handler.get_format("/path/to/song.m4a") == "m4a"
         assert ID3Handler.get_format("/path/to/song.wma") == "wma"
+        assert ID3Handler.get_format("/path/to/song.ogg") == "ogg"
 
     def test_case_insensitive(self):
         """Should handle uppercase extensions."""
@@ -129,7 +134,7 @@ class TestGetFormat:
     def test_returns_none_for_unsupported(self):
         """Should return None for unsupported formats."""
         assert ID3Handler.get_format("/path/to/song.wav") is None
-        assert ID3Handler.get_format("/path/to/song.ogg") is None
+        assert ID3Handler.get_format("/path/to/song.aac") is None
 
 
 class TestWriteTags:

@@ -5,6 +5,7 @@ from id3_handler.tag_handlers.mp3 import Mp3TagHandler
 from id3_handler.tag_handlers.flac import FlacTagHandler
 from id3_handler.tag_handlers.m4a import M4aTagHandler
 from id3_handler.tag_handlers.wma import WmaTagHandler
+from id3_handler.tag_handlers.ogg import OggTagHandler
 
 __all__ = [
     "TagHandler",
@@ -12,4 +13,5 @@ __all__ = [
     "FlacTagHandler",
     "M4aTagHandler",
     "WmaTagHandler",
+    "OggTagHandler",
 ]

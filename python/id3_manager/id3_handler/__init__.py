@@ -10,6 +10,7 @@ from id3_handler.tag_handlers import (
     FlacTagHandler,
     M4aTagHandler,
     WmaTagHandler,
+    OggTagHandler,
 )
 from id3_handler.tag_handlers.mp3 import ID3_ENCODING_UTF8  # noqa: F401 (re-exported)
 from id3_handler.backup import SafeWriter
@@ -49,6 +50,8 @@ class ID3Handler:
                 return self._read_m4a_tags(file_path)
             case ".wma":
                 return self._read_wma_tags(file_path)
+            case ".ogg":
+                return self._read_ogg_tags(file_path)
             case _:
                 logger.warning(f"Unsupported format: {ext}")
                 return TrackMetadata()
@@ -64,6 +67,9 @@ class ID3Handler:
 
     def _read_wma_tags(self, file_path: str) -> TrackMetadata:
         return WmaTagHandler().read_tags(file_path)
+
+    def _read_ogg_tags(self, file_path: str) -> TrackMetadata:
+        return OggTagHandler().read_tags(file_path)
 
     def write_tags(
         self, file_path: str, metadata: TrackMetadata, preserve_existing: bool = True
@@ -81,3 +87,6 @@ class ID3Handler:
 
     def _write_wma_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
         return WmaTagHandler().write_tags(file_path, metadata)
+
+    def _write_ogg_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
+        return OggTagHandler().write_tags(file_path, metadata)

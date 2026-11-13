@@ -355,6 +355,46 @@ class TestReadWmaTags:
 
 
 # ---------------------------------------------------------------------------
+# OGG tests
+# ---------------------------------------------------------------------------
+
+
+class TestOggTags:
+    def test_reads_tags_from_ogg(self, tmp_path):
+        handler = ID3Handler()
+        mock_audio = {
+            "title": ["OGG Song"],
+            "artist": ["OGG Artist"],
+            "albumartist": ["Album Artist"],
+            "tracknumber": ["3/12"],
+            "date": ["2018"],
+        }
+        with patch("id3_handler.tag_handlers.ogg.File", return_value=mock_audio):
+            result = handler._read_ogg_tags(str(tmp_path / "song.ogg"))
+        assert result.title == "OGG Song"
+        assert result.artist == "OGG Artist"
+        assert result.album_artist == "Album Artist"
+        assert result.track_number == 3
+        assert result.total_tracks == 12
+        assert result.year == 2018
+
+    def test_write_ogg_tags(self, tmp_path):
+        handler = ID3Handler()
+        meta = TrackMetadata(title="OGG Written", artist="A", track_number=4, year=2016)
+        mock_audio = MagicMock()
+        with patch("id3_handler.tag_handlers.ogg.File", return_value=mock_audio):
+            assert handler._write_ogg_tags(str(tmp_path / "w.ogg"), meta) is True
+        mock_audio.save.assert_called_once()
+        calls = {c[0][0]: c[0][1] for c in mock_audio.__setitem__.call_args_list}
+        assert calls == {"title": "OGG Written", "artist": "A", "tracknumber": "4", "date": "2016"}
+
+    def test_unrecognized_ogg_raises(self, tmp_path):
+        with patch("id3_handler.tag_handlers.ogg.File", return_value=None):
+            with pytest.raises(ValueError):
+                ID3Handler()._read_ogg_tags(str(tmp_path / "bad.ogg"))
+
+
+# ---------------------------------------------------------------------------
 # Write methods
 # ---------------------------------------------------------------------------
 

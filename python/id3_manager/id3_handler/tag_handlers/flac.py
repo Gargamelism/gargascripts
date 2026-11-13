@@ -9,8 +9,11 @@ from id3_handler.formats import parse_track_disc, parse_year
 class FlacTagHandler:
     """Reads and writes tags for FLAC files."""
 
+    def _open(self, file_path: str):
+        return FLAC(file_path)
+
     def read_tags(self, file_path: str) -> TrackMetadata:
-        audio = FLAC(file_path)
+        audio = self._open(file_path)
         track_num, total_tracks = parse_track_disc(audio.get("tracknumber", [""])[0])
         if total_tracks is None:
             total_str = audio.get("totaltracks", [""])[0]
@@ -41,7 +44,7 @@ class FlacTagHandler:
         )
 
     def write_tags(self, file_path: str, metadata: TrackMetadata) -> bool:
-        audio = FLAC(file_path)
+        audio = self._open(file_path)
         if metadata.title:
             audio["title"] = metadata.title
         if metadata.artist:
